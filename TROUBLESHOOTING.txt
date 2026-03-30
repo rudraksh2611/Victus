@@ -25,6 +25,9 @@ Victus Voice Assistant — if you hear nothing after turning on the PC
    powershell -ExecutionPolicy Bypass -File .\setup_login_task.ps1
 
 4) config.json knobs
+   - show_overlay_ui: false turns off the small bottom-right window (Tk). If the overlay crashes or you prefer no UI, set false.
+   - overlay_canvas_width / overlay_window_width: control how wide the speaking waveform and window are (pixels). You must save config.json and run the briefing again; Task Scheduler runs load config at each start.
+   - The overlay footer shows the loaded waveform width (e.g. "waveform 280px"). briefing.log should contain a line "overlay starting geom=..." with the same numbers.
    - post_internet_delay_seconds: wait after internet is detected before speaking (default 15). Increase if log shows pygame audio errors.
    - tts_engine: "sapi" uses only Windows voices (more reliable at login on some PCs; set sapi_voice_hint to "Zira" or "David").
    - internet_wait_max_seconds: how long to wait for internet before trying anyway.
