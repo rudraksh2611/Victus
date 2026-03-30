@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+
+# Local runtime/personal config
+config.json
+
+# Local logs and OS files
+*.log
+.DS_Store
+Thumbs.db
