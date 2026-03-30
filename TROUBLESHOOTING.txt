@@ -1,0 +1,40 @@
+Victus Voice Assistant — if you hear nothing after turning on the PC
+====================================================================
+
+1) Read the log file (most important)
+   Path:  %LOCALAPPDATA%\VictusVoiceAssistant\briefing.log
+   (Full path example: C:\Users\YOURNAME\AppData\Local\VictusVoiceAssistant\briefing.log)
+   Open it in Notepad after a login where you heard nothing.
+   - "finished OK" = the script ran; problem may be volume, speakers, or Bluetooth headset not connected yet.
+   - "pygame mixer attempt ... failed" = Windows was not ready to play sound; increase post_internet_delay_seconds in config.json (try 25 or 30).
+   - "Edge TTS / pygame failed" then "SAPI fallback finished" = you should still have heard Zira (Windows voice). If not, check volume.
+   - No log file at all = the scheduled task probably did not start (see step 2).
+
+2) Check Task Scheduler
+   - Press Win, type: Task Scheduler
+   - Task Scheduler Library -> VictusMorningBriefing
+   - Right-click -> Run   (test while you are logged in)
+   - If it fails: History tab (enable "All Tasks History" in the right panel if needed) and read the error code.
+   - Confirm the action still points to:
+     ...\Victus Voice Assistant\.venv\Scripts\pythonw.exe
+     with argument:  ...\morning_briefing.py
+   - If you moved or renamed the project folder, run setup_login_task.ps1 again from the new folder.
+
+3) Re-install the scheduled task
+   Open PowerShell in the project folder and run:
+   powershell -ExecutionPolicy Bypass -File .\setup_login_task.ps1
+
+4) config.json knobs
+   - post_internet_delay_seconds: wait after internet is detected before speaking (default 15). Increase if log shows pygame audio errors.
+   - tts_engine: "sapi" uses only Windows voices (more reliable at login on some PCs; set sapi_voice_hint to "Zira" or "David").
+   - internet_wait_max_seconds: how long to wait for internet before trying anyway.
+
+5) Manual test (hear speech without reboot)
+   In PowerShell, project folder:
+   .\.venv\Scripts\python.exe .\morning_briefing.py
+   For a quick test without waits:
+   $env:VICTUS_NO_DELAY='1'; .\.venv\Scripts\python.exe .\morning_briefing.py
+
+6) Dependencies
+   In the project folder:
+   .\.venv\Scripts\python.exe -m pip install -r requirements.txt
