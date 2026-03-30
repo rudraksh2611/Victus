@@ -7,50 +7,74 @@ This file intentionally stays small so Task Scheduler can keep using the same pa
 from __future__ import annotations
 
 import sys
+import time
+import traceback
 
-from victus.briefing_content import build_briefing_segments
+from victus.briefing import build_briefing_segments
 from victus.runtime_support import autostart_log, load_config
-from victus.speech_engines import print_installed_voices, speak_segments
-from victus.startup_gate import run_startup_gates
+from victus.speech import print_installed_voices, speak_segments
+from victus.startup_gate import BriefingCancelled, run_startup_gates
+from victus.ui import OverlayController
 
 
-def build_segments_with_fallback(cfg: dict) -> list[str]:
-    try:
-        return build_briefing_segments(cfg)
-    except Exception as e:
-        msg = f"Morning briefing failed: {e}. Check your internet connection and config.json."
-        autostart_log(f"build failed: {e}")
-        print(msg, file=sys.stderr)
-        return [msg]
+def _format_exc(e: BaseException) -> str:
+    return "".join(traceback.format_exception(type(e), e, e.__traceback__)).strip()
 
 
-def speak_with_logging(segments: list[str], cfg: dict) -> None:
-    try:
-        speak_segments(segments, cfg)
-        autostart_log("finished OK")
-    except Exception as e:
-        autostart_log(f"speak failed: {e!r}")
-        raise
+def speak_with_logging(segments: list[str], cfg: dict, overlay: OverlayController | None = None) -> None:
+    speak_segments(segments, cfg, overlay=overlay)
+    autostart_log("finished OK")
 
 
-def main() -> None:
+def main() -> int:
     autostart_log("briefing started")
+    overlay: OverlayController | None = None
     try:
         cfg = load_config()
     except Exception as e:
-        autostart_log(f"config load failed: {e}")
-        raise
-    run_startup_gates(cfg)
-    segments = build_segments_with_fallback(cfg)
-    speak_with_logging(segments, cfg)
+        autostart_log(f"config load failed: {e!r}")
+        print(_format_exc(e), file=sys.stderr)
+        return 1
+
+    try:
+        overlay = OverlayController(cfg)
+        overlay.start()
+        run_startup_gates(cfg, overlay=overlay)
+        segments = build_briefing_segments(cfg)
+        speak_with_logging(segments, cfg, overlay=overlay)
+    except BriefingCancelled:
+        autostart_log("briefing cancelled by user (Stop)")
+        if overlay is not None:
+            try:
+                overlay.shutdown_quick()
+            except Exception:
+                pass
+        return 0
+    except Exception as e:
+        msg = _format_exc(e)
+        autostart_log(f"error: {msg}")
+        print(msg, file=sys.stderr)
+        if overlay is not None:
+            try:
+                overlay.show_error(msg)
+                time.sleep(14)
+            except Exception:
+                pass
+        if overlay is not None:
+            try:
+                overlay.shutdown_quick()
+            except Exception:
+                pass
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
     if "--list-voices" in sys.argv:
-        print_installed_voices()
-    else:
         try:
-            main()
+            print_installed_voices()
         except Exception as e:
-            autostart_log(f"uncaught: {e!r}")
+            print(_format_exc(e), file=sys.stderr)
             sys.exit(1)
+    else:
+        sys.exit(main())
