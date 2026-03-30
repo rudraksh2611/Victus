@@ -8,8 +8,8 @@ import time
 
 import pyttsx3
 
-from briefing_content import soften_for_speech
-from runtime_support import autostart_log, cfg_float
+from .briefing_content import soften_for_speech
+from .runtime_support import autostart_log, cfg_float
 
 
 def init_pygame_mixer_with_retries() -> None:

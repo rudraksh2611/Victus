@@ -4,7 +4,7 @@ import os
 import sys
 import time
 
-from runtime_support import autostart_log, cfg_float, http_get
+from .runtime_support import autostart_log, cfg_float, http_get
 
 _WIN_ERROR_ALREADY_EXISTS = 183
 _MUTEX_NAME = "Local\\VictusVoiceAssistantBriefingLogon"

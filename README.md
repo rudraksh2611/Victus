@@ -31,10 +31,11 @@ It is designed for **automatic run at Windows sign-in** via Task Scheduler.
 ## Project Structure
 
 - `morning_briefing.py` - entrypoint/orchestrator (kept stable for Task Scheduler)
-- `runtime_support.py` - config loading, logging, HTTP helper functions
-- `startup_gate.py` - login/internet/mutex startup gating logic
-- `briefing_content.py` - weather/news retrieval and briefing text construction
-- `speech_engines.py` - Edge/SAPI TTS + playback handling
+- `victus/` - Python package with the implementation
+  - `runtime_support.py` - config loading, logging, HTTP helper functions
+  - `startup_gate.py` - login/internet/mutex startup gating logic
+  - `briefing_content.py` - weather/news retrieval and briefing text construction
+  - `speech_engines.py` - Edge/SAPI TTS + playback handling
 - `setup_login_task.ps1` - register Windows scheduled task
 - `remove_login_task.ps1` - remove the scheduled task
 - `config.example.json` - safe template config

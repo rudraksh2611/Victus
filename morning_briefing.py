@@ -1,4 +1,4 @@
-﻿"""
+"""
 Victus morning briefing entrypoint.
 
 This file intentionally stays small so Task Scheduler can keep using the same path:
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import sys
 
-from briefing_content import build_briefing_segments
-from runtime_support import autostart_log, load_config
-from speech_engines import print_installed_voices, speak_segments
-from startup_gate import run_startup_gates
+from victus.briefing_content import build_briefing_segments
+from victus.runtime_support import autostart_log, load_config
+from victus.speech_engines import print_installed_voices, speak_segments
+from victus.startup_gate import run_startup_gates
 
 
 def build_segments_with_fallback(cfg: dict) -> list[str]:

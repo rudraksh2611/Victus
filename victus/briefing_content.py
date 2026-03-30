@@ -7,7 +7,7 @@ from email.utils import parsedate_to_datetime
 
 import feedparser
 
-from runtime_support import http_get_json
+from .runtime_support import http_get_json
 
 WMO_LABELS = {
     0: "clear sky",

@@ -7,8 +7,9 @@ from pathlib import Path
 
 import requests
 
-ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "config.json"
+PACKAGE_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = PACKAGE_DIR.parent
+CONFIG_PATH = PROJECT_ROOT / "config.json"
 
 
 def autostart_log(message: str) -> None:
@@ -47,4 +48,3 @@ def http_get_json(url: str, *, timeout: float, params: dict | None = None) -> di
     response = http_get(url, timeout=timeout, params=params)
     response.raise_for_status()
     return response.json()
-
