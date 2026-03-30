@@ -35,6 +35,11 @@ It is designed for **automatic run at Windows sign-in** via Task Scheduler.
   - Windows SAPI (fallback)
 - **Operational logging**
   - `%LOCALAPPDATA%\VictusVoiceAssistant\briefing.log`
+- **Bottom-right overlay (Windows)**
+  - Countdown during `login_delay_seconds`
+  - “Connecting to network…” while waiting for internet
+  - Speaking view: **code-style transcript on the left**, **waveform on the right**; **Built by Rudraksh** bottom-right
+  - Toggle with `show_overlay_ui` in `config.json`
 
 ---
 
@@ -43,11 +48,13 @@ It is designed for **automatic run at Windows sign-in** via Task Scheduler.
 | Path | Role |
 |------|------|
 | `morning_briefing.py` | Thin entrypoint/orchestrator (stable path for Task Scheduler) |
-| `victus/__init__.py` | Package marker |
+| `victus/__init__.py` | Package marker and layout notes |
 | `victus/runtime_support.py` | Config loading, logging, HTTP helpers (`config.json` resolved from project root) |
 | `victus/startup_gate.py` | Login delay, optional mutex, internet polling, post-network delay |
-| `victus/briefing_content.py` | Weather, RSS news, briefing text assembly |
-| `victus/speech_engines.py` | Edge TTS + pygame playback, SAPI fallback |
+| `victus/briefing/` | Briefing content: `content.py` (weather, RSS, segment builders); import as `victus.briefing` |
+| `victus/speech/` | TTS: `engines.py` (Edge + pygame, SAPI fallback); import as `victus.speech` |
+| `victus/ui/` | Optional bottom-right Tk overlay (separate process); import as `victus.ui` |
+| `victus/briefing_content.py`, `speech_engines.py`, `overlay_ui.py` | Thin compatibility re-exports (old import paths still work) |
 | `requirements.txt` | Python dependencies |
 | `config.example.json` | Safe template; copy to `config.json` locally |
 | `setup_login_task.ps1` | Register Windows scheduled task |
@@ -87,6 +94,11 @@ copy config.example.json config.json
 
 | Key | Purpose |
 |-----|---------|
+| `show_overlay_ui` | If `true`, show the small bottom-right UI (countdown, then speaking animation). Set `false` to disable. |
+| `overlay_canvas_width` | Width in pixels of the speaking waveform (default `340`). Change this to see a narrower or wider graphic; restart the app after editing. |
+| `overlay_window_width` | Outer window width (default `420`, or `overlay_canvas_width + 80` if omitted). |
+| `overlay_window_height` | Window height in pixels (default `248`). |
+| `overlay_text_columns` | Width of the transcript text area in character columns (default `48`). |
 | `city` | Weather location (e.g. `Greater Noida`) |
 | `news_feed_url` | RSS feed URL for headlines |
 | `news_count` | How many headlines to speak |
