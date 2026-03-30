@@ -1,0 +1,21 @@
+{
+  "city": "Greater Noida",
+  "news_feed_url": "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en",
+  "news_count": 3,
+  "login_delay_seconds": 25,
+  "internet_wait_max_seconds": 600,
+  "internet_check_poll_seconds": 1.5,
+  "post_internet_delay_seconds": 15,
+  "logon_singleton_mutex": false,
+  "sapi_voice_hint": "Zira",
+  "tts_engine": "edge",
+  "tts_voice": "en-IN-NeerjaNeural",
+  "edge_speaking_rate": "+18%",
+  "edge_volume": "+0%",
+  "edge_playback_mode": "continuous",
+  "tts_rate": 200,
+  "tts_volume": 0.95,
+  "pause_between_sections_seconds": 0,
+  "greeting_name": "",
+  "briefing_language": "en"
+}
