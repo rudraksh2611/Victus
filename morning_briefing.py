@@ -11,7 +11,7 @@ import time
 import traceback
 
 from victus.briefing import build_briefing_segments
-from victus.runtime_support import autostart_log, cfg_float, is_autostart_logon, load_config
+from victus.runtime_support import CONFIG_PATH, autostart_log, cfg_float, is_autostart_logon, load_config
 from victus.speech import print_installed_voices, speak_segments
 from victus.startup_gate import BriefingCancelled, run_startup_gates
 from victus.ui import OverlayController
@@ -27,6 +27,18 @@ def speak_with_logging(segments: list[str], cfg: dict, overlay: OverlayControlle
 
 
 def main() -> int:
+    need_wizard = ("--setup" in sys.argv) or (not CONFIG_PATH.exists())
+    if need_wizard:
+        try:
+            from victus.ui.setup_wizard import run_setup_wizard
+
+            if not run_setup_wizard(editing=CONFIG_PATH.exists()):
+                return 1
+        except Exception as e:
+            autostart_log(f"setup wizard failed: {e!r}")
+            print(_format_exc(e), file=sys.stderr)
+            return 1
+
     autostart_log("briefing started")
     overlay: OverlayController | None = None
     try:
@@ -77,6 +89,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     if "--list-voices" in sys.argv:
         try:
             print_installed_voices()
