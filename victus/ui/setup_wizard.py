@@ -12,6 +12,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from ..runtime_support import CONFIG_PATH, PROJECT_ROOT, example_config_path
+from ..windows_autostart import register_logon_task, unregister_logon_task
 
 # Common Edge neural voices (users can type any ShortName in the combo).
 _EDGE_VOICE_PRESETS = (
@@ -122,6 +123,14 @@ def run_setup_wizard(*, editing: bool = False) -> bool:
     var_overlay = tk.BooleanVar(value=bool(merged.get("show_overlay_ui", True)))
     ttk.Checkbutton(frm, text="Show small on-screen window during briefing", variable=var_overlay).pack(anchor="w", **pad)
 
+    var_logon_autostart = tk.BooleanVar(value=bool(merged.get("windows_logon_autostart", True)))
+    if sys.platform == "win32":
+        ttk.Checkbutton(
+            frm,
+            text="Run when I sign in to Windows (scheduled task; recommended for the installed .exe)",
+            variable=var_logon_autostart,
+        ).pack(anchor="w", **pad)
+
     hint = (
         "You need internet for weather, news, and the voice. "
         "After saving, the briefing can start automatically."
@@ -155,6 +164,10 @@ def run_setup_wizard(*, editing: bool = False) -> bool:
         out["news_count"] = nc
         out["show_overlay_ui"] = bool(var_overlay.get())
         out["tts_engine"] = "edge"
+        if sys.platform == "win32":
+            out["windows_logon_autostart"] = bool(var_logon_autostart.get())
+        else:
+            out["windows_logon_autostart"] = bool(merged.get("windows_logon_autostart", True))
 
         try:
             CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -163,6 +176,23 @@ def run_setup_wizard(*, editing: bool = False) -> bool:
         except OSError as e:
             messagebox.showerror("Victus setup", f"Could not save settings:\n{e}")
             return
+
+        if sys.platform == "win32" and getattr(sys, "frozen", False):
+            try:
+                delay = int(float(out.get("logon_task_delay_seconds", 45)))
+            except (TypeError, ValueError):
+                delay = 45
+            if out.get("windows_logon_autostart", True):
+                ok_task, err_task = register_logon_task(delay_seconds=delay)
+                if not ok_task:
+                    messagebox.showwarning(
+                        "Victus setup",
+                        "Settings were saved, but Windows could not enable sign-in startup.\n"
+                        "You may need to run the app once as a normal user with permission to create scheduled tasks.\n\n"
+                        + (err_task or "Unknown error"),
+                    )
+            else:
+                unregister_logon_task()
 
         saved = True
         messagebox.showinfo("Victus setup", "Settings saved.")

@@ -6,7 +6,7 @@
 #define MyAppExeName "VictusMorningBriefing.exe"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Victus"
-#define MyAppURL "https://github.com/example/victus"
+#define MyAppURL "https://github.com/rudraksh2611/Victus"
 
 [Setup]
 AppId={{A7B3E9D2-4C1F-4A8B-9E6D-2F1A8B3C9D4E}
