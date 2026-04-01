@@ -2,7 +2,7 @@
 # (after boot or after opening the laptop and logging in).
 #
 # Run once in PowerShell (your user account is enough — Admin usually not required):
-#   cd "D:\RSB Career\Projects\Victus Voice Assistant"
+#   cd "C:\Path\To\VictusVoiceAssistant"
 #   powershell -ExecutionPolicy Bypass -File .\setup_login_task.ps1
 #
 # Remove:  powershell -ExecutionPolicy Bypass -File .\remove_login_task.ps1
