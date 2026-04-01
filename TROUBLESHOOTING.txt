@@ -1,6 +1,19 @@
 Victus Voice Assistant — if you hear nothing after turning on the PC
 ====================================================================
 
+After a cold boot, Windows needs time for Wi‑Fi, DNS, the desktop shell, and the audio device.
+The scheduled task is installed with a delay after sign-in, and launch_at_logon.ps1 sets
+VICTUS_AUTOSTART=1 so the app adds extra waits (see autostart_* keys in config.json).
+Re-run setup_login_task.ps1 after pulling updates so the task uses the launcher and delay.
+
+0) Boot / sign-in tuning (smooth startup)
+   - Re-install the task from the project folder:
+       powershell -ExecutionPolicy Bypass -File .\setup_login_task.ps1
+   - Edit setup_login_task.ps1 → DelayAfterLogonSeconds (e.g. 60) if the PC is still waking up.
+   - In config.json: autostart_extra_delay_seconds (seconds before the overlay), autostart_post_internet_extra_seconds
+     (extra wait after internet before TTS), post_internet_delay_seconds (audio stack). Increase if pygame mixer fails in the log.
+   - Manual runs (double-click or python morning_briefing.py) do not set VICTUS_AUTOSTART unless you set it yourself.
+
 1) Read the log file (most important)
    Path:  %LOCALAPPDATA%\VictusVoiceAssistant\briefing.log
    (Full path example: C:\Users\YOURNAME\AppData\Local\VictusVoiceAssistant\briefing.log)
@@ -15,9 +28,7 @@ Victus Voice Assistant — if you hear nothing after turning on the PC
    - Task Scheduler Library -> VictusMorningBriefing
    - Right-click -> Run   (test while you are logged in)
    - If it fails: History tab (enable "All Tasks History" in the right panel if needed) and read the error code.
-   - Confirm the action still points to:
-     ...\Victus Voice Assistant\.venv\Scripts\pythonw.exe
-     with argument:  ...\morning_briefing.py
+   - Confirm the action runs launch_at_logon.ps1 (recommended) or pythonw with morning_briefing.py.
    - If you moved or renamed the project folder, run setup_login_task.ps1 again from the new folder.
 
 3) Re-install the scheduled task
@@ -25,6 +36,9 @@ Victus Voice Assistant — if you hear nothing after turning on the PC
    powershell -ExecutionPolicy Bypass -File .\setup_login_task.ps1
 
 4) config.json knobs
+   - pre_overlay_delay_seconds / autostart_extra_delay_seconds: extra wait before the overlay; autostart_extra applies when VICTUS_AUTOSTART=1.
+   - autostart_post_internet_extra_seconds: added to post_internet_delay_seconds at autostart for audio readiness.
+   - overlay_child_process_ready_seconds: pause after spawning the overlay process (default ~0.85s).
    - show_overlay_ui: false turns off the small bottom-right window (Tk). If the overlay crashes or you prefer no UI, set false.
    - overlay_canvas_width / overlay_window_width: control how wide the speaking waveform and window are (pixels). You must save config.json and run the briefing again; Task Scheduler runs load config at each start.
    - The overlay footer shows the loaded waveform width (e.g. "waveform 280px"). briefing.log should contain a line "overlay starting geom=..." with the same numbers.

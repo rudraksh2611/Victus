@@ -92,11 +92,24 @@ async def speak_edge_chunked(
     spw = _seconds_per_word_from_edge_rate(rate)
 
     async def synth(text: str) -> str:
-        fd, path = tempfile.mkstemp(suffix=".mp3", prefix="victus_")
-        os.close(fd)
-        comm = edge_tts.Communicate(text, voice=voice, rate=rate, volume=volume, pitch=pitch)
-        await comm.save(path)
-        return path
+        last_err: Exception | None = None
+        for attempt in range(1, 6):
+            fd, path = tempfile.mkstemp(suffix=".mp3", prefix="victus_")
+            os.close(fd)
+            try:
+                comm = edge_tts.Communicate(text, voice=voice, rate=rate, volume=volume, pitch=pitch)
+                await comm.save(path)
+                return path
+            except Exception as e:
+                last_err = e
+                autostart_log(f"edge synth attempt {attempt} failed: {e!r}")
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                await asyncio.sleep(min(2.0 * attempt, 10.0))
+        assert last_err is not None
+        raise last_err
 
     async def playback_loop(line: str, current_path: str) -> None:
         words = _words_for_sync(line)

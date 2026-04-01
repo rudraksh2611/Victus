@@ -13,6 +13,8 @@ import time
 from multiprocessing import Process
 from typing import Any
 
+from ..runtime_support import cfg_float
+
 # ---------------------------------------------------------------------------
 # Child process: must be picklable for Windows "spawn" — keep at module level.
 # ---------------------------------------------------------------------------
@@ -607,6 +609,7 @@ class OverlayController:
     def __init__(self, cfg: dict) -> None:
         self._enabled = bool(cfg.get("show_overlay_ui", True)) and overlay_supported()
         self._geom = _geom_from_cfg(cfg)
+        self._spawn_wait = cfg_float(cfg, "overlay_child_process_ready_seconds", 0.85, 0.2, 3.0)
         self._proc: Process | None = None
         self._q: multiprocessing.Queue | None = None
         self._feedback_q: multiprocessing.Queue | None = None
@@ -618,17 +621,30 @@ class OverlayController:
             return
         from ..runtime_support import autostart_log
 
-        autostart_log(f"overlay starting geom={self._geom}")
-        ctx = multiprocessing.get_context("spawn")
-        self._q = ctx.Queue()
-        self._feedback_q = ctx.Queue()
-        self._proc = ctx.Process(
-            target=_overlay_main,
-            args=(self._q, self._feedback_q, self._geom),
-            daemon=True,
-        )
-        self._proc.start()
-        time.sleep(0.35)
+        last_err: BaseException | None = None
+        for attempt in range(1, 4):
+            try:
+                autostart_log(f"overlay starting geom={self._geom} attempt={attempt}")
+                ctx = multiprocessing.get_context("spawn")
+                self._q = ctx.Queue()
+                self._feedback_q = ctx.Queue()
+                self._proc = ctx.Process(
+                    target=_overlay_main,
+                    args=(self._q, self._feedback_q, self._geom),
+                    daemon=True,
+                )
+                self._proc.start()
+                time.sleep(self._spawn_wait)
+                return
+            except Exception as e:
+                last_err = e
+                autostart_log(f"overlay spawn attempt {attempt} failed: {e!r}")
+                self._q = None
+                self._feedback_q = None
+                self._proc = None
+                time.sleep(1.2 * attempt)
+        if last_err is not None:
+            raise last_err
 
     def _send(self, msg: dict) -> None:
         if not self._enabled or self._q is None:

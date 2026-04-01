@@ -27,6 +27,11 @@ def autostart_log(message: str) -> None:
         pass
 
 
+def is_autostart_logon() -> bool:
+    """True when launched via launch_at_logon.ps1 (scheduled task sets VICTUS_AUTOSTART=1)."""
+    return os.environ.get("VICTUS_AUTOSTART", "").strip() == "1"
+
+
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
         raise FileNotFoundError(f"Missing {CONFIG_PATH.name}. Copy config.example.json to config.json.")

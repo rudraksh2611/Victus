@@ -11,7 +11,7 @@ import time
 import traceback
 
 from victus.briefing import build_briefing_segments
-from victus.runtime_support import autostart_log, load_config
+from victus.runtime_support import autostart_log, cfg_float, is_autostart_logon, load_config
 from victus.speech import print_installed_voices, speak_segments
 from victus.startup_gate import BriefingCancelled, run_startup_gates
 from victus.ui import OverlayController
@@ -35,6 +35,13 @@ def main() -> int:
         autostart_log(f"config load failed: {e!r}")
         print(_format_exc(e), file=sys.stderr)
         return 1
+
+    bootstrap = cfg_float(cfg, "pre_overlay_delay_seconds", 0, 0, 600)
+    if is_autostart_logon():
+        bootstrap += cfg_float(cfg, "autostart_extra_delay_seconds", 18, 0, 600)
+    if bootstrap > 0:
+        autostart_log(f"session bootstrap delay {bootstrap}s (before overlay)")
+        time.sleep(bootstrap)
 
     try:
         overlay = OverlayController(cfg)

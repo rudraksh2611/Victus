@@ -5,7 +5,7 @@ import sys
 import time
 
 from .ui.overlay import OverlayController
-from .runtime_support import autostart_log, cfg_float, http_get
+from .runtime_support import autostart_log, cfg_float, http_get, is_autostart_logon
 
 _WIN_ERROR_ALREADY_EXISTS = 183
 _MUTEX_NAME = "Local\\VictusVoiceAssistantBriefingLogon"
@@ -111,6 +111,8 @@ def _run_startup_gates_impl(cfg: dict, overlay: OverlayController | None = None)
         overlay.waiting_network()
     wait_for_internet(cfg, overlay=overlay)
     pad = cfg_float(cfg, "post_internet_delay_seconds", 15, 0.0, 120.0)
+    if is_autostart_logon():
+        pad += cfg_float(cfg, "autostart_post_internet_extra_seconds", 8, 0.0, 120.0)
     if pad > 0:
         autostart_log(f"post-internet delay {pad}s (lets Windows audio session start)")
         if overlay:
