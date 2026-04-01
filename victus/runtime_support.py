@@ -2,14 +2,31 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import requests
 
-PACKAGE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = PACKAGE_DIR.parent
+
+def _project_root() -> Path:
+    """Project folder: repo root when running from source; folder containing the .exe when frozen."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+PROJECT_ROOT = _project_root()
 CONFIG_PATH = PROJECT_ROOT / "config.json"
+
+
+def example_config_path() -> Path:
+    """Bundled template (PyInstaller: inside _MEIPASS); dev: project root."""
+    if getattr(sys, "frozen", False):
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass) / "config.example.json"
+    return PROJECT_ROOT / "config.example.json"
 
 
 def autostart_log(message: str) -> None:
@@ -34,7 +51,12 @@ def is_autostart_logon() -> bool:
 
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
-        raise FileNotFoundError(f"Missing {CONFIG_PATH.name}. Copy config.example.json to config.json.")
+        hint = (
+            "Copy config.example.json to config.json in the same folder as VictusMorningBriefing.exe."
+            if getattr(sys, "frozen", False)
+            else "Copy config.example.json to config.json in the project folder."
+        )
+        raise FileNotFoundError(f"Missing {CONFIG_PATH.name}. {hint}")
     # Accept UTF-8 with/without BOM (PowerShell may save JSON with BOM).
     with open(CONFIG_PATH, encoding="utf-8-sig") as f:
         return json.load(f)

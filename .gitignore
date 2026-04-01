@@ -1,6 +1,9 @@
 .venv/
 __pycache__/
 *.pyc
+build/
+dist/
+Output/
 
 # Local runtime/personal config
 config.json
