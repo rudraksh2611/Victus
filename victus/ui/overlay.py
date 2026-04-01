@@ -40,6 +40,9 @@ def _geom_from_cfg(cfg: dict) -> dict:
     win_w = max(380, min(win_w, 900))
     win_h = int(cfg.get("overlay_window_height", 248))
     win_h = max(200, min(win_h, 800))
+    credits = str(cfg.get("overlay_credits_name", "")).strip()
+    footer_text = f"Built by {credits}" if credits else "Built by"
+
     return {
         "canvas_w": circle_d,
         "win_w": win_w,
@@ -48,6 +51,7 @@ def _geom_from_cfg(cfg: dict) -> dict:
         "text_lines": text_lines,
         "code_font_size": code_font_size,
         "wave_h": wave_h,
+        "footer_text": footer_text,
     }
 
 
@@ -133,7 +137,8 @@ def _overlay_main(
     speaking_split = tk.Frame(body, bg=bg)
 
     footer_font = tkfont.Font(family="Segoe UI", size=8)
-    footer_lbl = tk.Label(outer, text="Built by Rudraksh, yeah it's me", fg="#636366", bg=bg, font=footer_font, anchor="e")
+    footer_text = str(geom.get("footer_text", "Built by"))
+    footer_lbl = tk.Label(outer, text=footer_text, fg="#636366", bg=bg, font=footer_font, anchor="e")
 
     # Countdown / status text
     num_lbl = tk.Label(body, text="25", fg="white", bg=bg, font=big_font)
