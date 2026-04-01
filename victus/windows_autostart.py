@@ -14,7 +14,8 @@ from pathlib import Path
 from .runtime_support import PROJECT_ROOT, autostart_log
 
 TASK_NAME = "VictusMorningBriefing"
-
+# Created by Inno installer when user opts out of "run at sign-in" so the app does not re-register the task.
+INSTALLER_OPT_OUT_FLAG = "VictusNoLogonAutostart.txt"
 _CREATE_FLAGS = 0x08000000 if sys.platform == "win32" else 0
 
 
@@ -156,11 +157,17 @@ def unregister_logon_task() -> tuple[bool, str]:
         return False, str(e)
 
 
+def _installer_opted_out_of_logon_autostart() -> bool:
+    return (install_directory() / INSTALLER_OPT_OUT_FLAG).is_file()
+
+
 def ensure_logon_task_if_configured(cfg: dict) -> None:
     """
     If running as frozen exe on Windows and config requests autostart but task is missing, register it.
     """
     if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return
+    if _installer_opted_out_of_logon_autostart():
         return
     if not bool(cfg.get("windows_logon_autostart", True)):
         return

@@ -4,7 +4,8 @@ Victus Voice Assistant — after setup
 What was installed
 ------------------
 • VictusMorningBriefing.exe — main program (double-click to run).
-• launch_exe_at_logon.cmd — optional: use this as the Task Scheduler "Program" if you want the briefing to start when you sign in to Windows (with extra boot delays). Point the task to this file, not only the .exe, if you use autostart.
+• launch_exe_at_logon.cmd — used when "run at sign-in" is enabled in the installer (Task Scheduler).
+• During setup you can choose to start Victus automatically when you sign in to Windows (recommended).
 
 First run
 ---------

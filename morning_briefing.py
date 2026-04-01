@@ -12,8 +12,8 @@ import traceback
 
 from victus.briefing import build_briefing_segments
 from victus.runtime_support import CONFIG_PATH, autostart_log, cfg_float, is_autostart_logon, load_config
-from victus.windows_autostart import ensure_logon_task_if_configured
 from victus.speech import print_installed_voices, speak_segments
+from victus.windows_autostart import ensure_logon_task_if_configured
 from victus.startup_gate import BriefingCancelled, run_startup_gates
 from victus.ui import OverlayController
 
@@ -49,6 +49,7 @@ def main() -> int:
         print(_format_exc(e), file=sys.stderr)
         return 1
 
+    # After install, first successful run registers the logon task so the EXE starts after each sign-in.
     ensure_logon_task_if_configured(cfg)
 
     bootstrap = cfg_float(cfg, "pre_overlay_delay_seconds", 0, 0, 600)
