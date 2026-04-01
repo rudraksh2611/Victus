@@ -1,4 +1,4 @@
-﻿# Victus Voice Assistant
+# Victus Voice Assistant
 
 Windows startup voice assistant that speaks a daily briefing after login:
 
@@ -16,7 +16,7 @@ Designed for **automatic run at Windows sign-in** via Task Scheduler.
 
 - **`morning_briefing.py`** (repo root) is the stable entry script.
 - Implementation lives in the **`victus/`** package (`import victus...`).
-- **`config.json`** must live in the **project root** (same folder as `morning_briefing.py`).
+- **`config.json`** must live next to the entry you run: the **project root** when using `morning_briefing.py`, or the **same folder as `VictusMorningBriefing.exe`** when using the built executable.
 
 ---
 
@@ -35,6 +35,7 @@ Designed for **automatic run at Windows sign-in** via Task Scheduler.
   - Countdown during startup delay
   - Network wait state
   - Speaking transcript + waveform
+  - Footer line **Built by** *your name* (set `overlay_credits_name` in `config.json`; the words **Built by** stay fixed)
   - Stop / close controls
 - **Operational logging**
   - `%LOCALAPPDATA%\VictusVoiceAssistant\briefing.log`
@@ -55,7 +56,13 @@ Designed for **automatic run at Windows sign-in** via Task Scheduler.
 | `config.example.json` | Safe template; copy to `config.json` locally |
 | `setup_login_task.ps1` | Registers the logon task with delay |
 | `launch_at_logon.ps1` | Launcher used by the task (sets `VICTUS_AUTOSTART=1`) |
+| `launch_exe_at_logon.cmd` | Same idea for the built `.exe` (copy `dist` files together) |
 | `remove_login_task.ps1` | Removes scheduled task |
+| `VictusMorningBriefing.spec` | PyInstaller definition for a one-file `.exe` |
+| `build_windows.ps1` | Builds `dist\VictusMorningBriefing.exe` |
+| `installer\VictusSetup.iss` | Inno Setup script for `Output\VictusVoiceAssistant_Setup.exe` |
+| `build_installer.ps1` | Builds `.exe` then runs Inno Setup (install Inno Setup 6 first) |
+| `requirements-build.txt` | Build-only dependency (`pyinstaller`) |
 | `TROUBLESHOOTING.txt` | Boot/runtime troubleshooting guide |
 
 ---
@@ -98,6 +105,7 @@ copy config.example.json config.json
 | `overlay_text_height_lines` | Transcript height in lines |
 | `overlay_code_font_size` | Transcript font size |
 | `overlay_child_process_ready_seconds` | Wait after spawning overlay process |
+| `overlay_credits_name` | Your name after **Built by** in the overlay footer (empty = footer shows only **Built by**) |
 | `city` | Weather city name |
 | `news_feed_url` | RSS URL for headlines |
 | `news_count` | Number of headlines |
@@ -121,6 +129,43 @@ copy config.example.json config.json
 
 ---
 
+## Build a Windows `.exe` (for sharing)
+
+On a Windows machine with Python 3.10+:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt -r requirements-build.txt
+powershell -ExecutionPolicy Bypass -File .\build_windows.ps1
+```
+
+Output: **`dist\VictusMorningBriefing.exe`**. The build script also copies **`config.example.json`** and **`launch_exe_at_logon.cmd`** into `dist\` for convenience.
+
+### Sharing with non-technical users (no code, no Notepad)
+
+- The **`.exe` already includes** Python and libraries (nothing extra to install from the web except normal Windows updates).
+- On **first run**, if there is **no** `config.json` next to the `.exe`, a **setup window** opens: name (for “Built by …”), city, voice, language, etc. Saving creates **`config.json`** in that same folder automatically.
+- To **change settings later**, run **`VictusMorningBriefing.exe --setup`** (e.g. create a shortcut whose target is `"C:\Path\VictusMorningBriefing.exe" --setup`).
+- **Startup at login:** use **`launch_exe_at_logon.cmd`** as the scheduled task action (or the Python `setup_login_task.ps1` flow from source). Or run the `.exe` directly if you do not need autostart-only delays.
+
+### Windows installer wizard (Next → Next → Finish)
+
+1. Install **[Inno Setup 6](https://jrsoftware.org/isinfo.php)** on your PC (default options are fine).
+2. From the project folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
+```
+
+This runs `build_windows.ps1`, then compiles **`installer\VictusSetup.iss`**.
+
+3. Give people **`Output\VictusVoiceAssistant_Setup.exe`**. They run it like any normal Windows installer: choose folder, optional desktop icon, Finish, and optional “Launch” at the end.
+
+The installer puts files under **`%LocalAppData%\Programs\VictusVoiceAssistant`** (no administrator rights required by default). Your **`config.json`** is created in that folder when they first run the app or complete the in-app setup wizard.
+
+---
+
 ## Run manually
 
 Normal run:
@@ -140,6 +185,12 @@ List available voices:
 
 ```powershell
 .\.venv\Scripts\python.exe .\morning_briefing.py --list-voices
+```
+
+Open the graphical setup again (same as the built-in first-run wizard):
+
+```powershell
+.\.venv\Scripts\python.exe .\morning_briefing.py --setup
 ```
 
 ---
