@@ -149,7 +149,7 @@ Output: **`dist\VictusMorningBriefing.exe`**. The build script also copies **`co
 - To **change settings later**, run **`VictusMorningBriefing.exe --setup`** (e.g. create a shortcut whose target is `"C:\Path\VictusMorningBriefing.exe" --setup`).
 - **Startup at login:** use **`launch_exe_at_logon.cmd`** as the scheduled task action (or the Python `setup_login_task.ps1` flow from source). Or run the `.exe` directly if you do not need autostart-only delays.
 
-### Windows installer wizard (Next → Next → Finish)
+### Windows installer wizard (`VictusVoiceAssistant_Setup.exe`)
 
 1. Install **[Inno Setup 6](https://jrsoftware.org/isinfo.php)** on your PC (default options are fine).
 2. From the project folder:
@@ -160,9 +160,53 @@ powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
 
 This runs `build_windows.ps1`, then compiles **`installer\VictusSetup.iss`**.
 
-3. Give people **`Output\VictusVoiceAssistant_Setup.exe`**. They run it like any normal Windows installer: choose folder, optional desktop icon, Finish, and optional “Launch” at the end.
+3. Share **`Output\VictusVoiceAssistant_Setup.exe`**. End users run it like any normal Windows installer.
 
-The installer puts files under **`%LocalAppData%\Programs\VictusVoiceAssistant`** (no administrator rights required by default). Your **`config.json`** is created in that folder when they first run the app or complete the in-app setup wizard.
+The installer puts files under **`%LocalAppData%\Programs\VictusVoiceAssistant`** (no administrator rights required by default). **`config.json`** is created in that folder when they first run the app or complete the in-app setup wizard.
+
+#### Installer screens (step by step)
+
+These images match the **Inno Setup 6** “modern” wizard defined in **`installer\VictusSetup.iss`**. They are **illustrative mockups** of each page (wording and options are the same as in the real installer).
+
+| Step | What you do |
+|------|-------------|
+| 1 | Welcome — click **Next**. |
+| 2 | **Select Destination Location** — default is fine (`…\VictusVoiceAssistant` under your user profile). Click **Next**. |
+| 3 | **Select Start Menu Folder** — default is fine. Click **Next**. |
+| 4 | **Select Additional Tasks** — under **Startup**, leave **“Run Victus automatically when I sign in to Windows…”** **checked** (default) so the app runs after each restart/sign-in via Task Scheduler. Optionally enable **Create a desktop icon**. Click **Next**. |
+| 5 | **Ready to Install** — click **Install**. |
+| 6 | **Installing** — wait for the progress bar. |
+| 7 | **Finished** — leave **“Launch Victus Voice Assistant”** checked if you want to open the app now. Click **Finish**. |
+
+**1 — Welcome**
+
+![Installer welcome](docs/installer/screenshots/01-welcome.png)
+
+**2 — Destination folder**
+
+![Select destination location](docs/installer/screenshots/02-destination.png)
+
+**3 — Start Menu folder**
+
+![Select Start Menu folder](docs/installer/screenshots/03-startmenu.png)
+
+**4 — Additional tasks (startup at sign-in — default ON)**
+
+This is the screen with the **default-checked** option to run Victus after every Windows sign-in (restart or login).
+
+![Select Additional Tasks — Startup option](docs/installer/screenshots/04-additional-tasks.png)
+
+**5 — Ready to install**
+
+![Ready to Install](docs/installer/screenshots/05-ready.png)
+
+**6 — Installing**
+
+![Installing](docs/installer/screenshots/06-installing.png)
+
+**7 — Finished**
+
+![Setup finished](docs/installer/screenshots/07-finished.png)
 
 ---
 

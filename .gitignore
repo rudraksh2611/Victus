@@ -12,3 +12,6 @@ config.json
 *.log
 .DS_Store
 Thumbs.db
+
+# Accidental copies into screenshot folder (not part of the installer guide)
+docs/installer/screenshots/c__*.png
