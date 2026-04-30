@@ -6,7 +6,14 @@ This file intentionally stays small so Task Scheduler can keep using the same pa
 """
 from __future__ import annotations
 
+import os
 import sys
+
+# Task Scheduler: use action "VictusMorningBriefing.exe", arguments "--autostart", "Start in" = install folder.
+# (No .cmd wrapper required; matches what windows_autostart registers.)
+if "--autostart" in sys.argv:
+    os.environ["VICTUS_AUTOSTART"] = "1"
+
 import time
 import traceback
 
@@ -28,16 +35,44 @@ def speak_with_logging(segments: list[str], cfg: dict, overlay: OverlayControlle
 
 
 def main() -> int:
-    need_wizard = ("--setup" in sys.argv) or (not CONFIG_PATH.exists())
+    # One-shot: register logon task (for manual Task Scheduler troubleshooting or scripts).
+    if (
+        getattr(sys, "frozen", False)
+        and sys.platform == "win32"
+        and "--register-logon-task" in sys.argv
+    ):
+        from victus.windows_autostart import register_logon_task
+
+        delay = 45
+        try:
+            cfg = load_config()
+            delay = int(float(cfg.get("logon_task_delay_seconds", 45)))
+        except Exception:
+            pass
+        ok, err = register_logon_task(delay_seconds=delay)
+        if not ok:
+            autostart_log(f"--register-logon-task failed: {err}")
+        return 0 if ok else 1
+
+    setup_only = "--setup" in sys.argv
+    need_wizard = setup_only or (not CONFIG_PATH.exists())
     if need_wizard:
         try:
             from victus.ui.setup_wizard import run_setup_wizard
 
-            if not run_setup_wizard(editing=CONFIG_PATH.exists()):
-                return 1
+            saved = run_setup_wizard(editing=CONFIG_PATH.exists())
         except Exception as e:
             autostart_log(f"setup wizard failed: {e!r}")
             print(_format_exc(e), file=sys.stderr)
+            return 1
+        # --setup is a stand-alone "open settings" command: exit after the
+        # wizard regardless of save/cancel so the user does not get a
+        # surprise briefing immediately after editing their preferences.
+        if setup_only:
+            return 0 if saved else 1
+        # First-run path (no config): require a save to continue into the
+        # briefing — cancelling should not start a default-config run.
+        if not saved:
             return 1
 
     autostart_log("briefing started")
