@@ -1,0 +1,130 @@
+
+================================================================================
+  VICTUS VOICE ASSISTANT
+  Windows Session Integration & Task Scheduler — Technical Reference
+  Document version: 1.0 · Audience: power users, IT support, release owners
+================================================================================
+
+
+1. PURPOSE
+----------
+This note describes how Victus is coupled to the Windows session model so
+the briefing can start automatically after you sign in — including after a
+full system restart — without requiring manual Task Scheduler configuration
+when the standard installer is used.
+
+
+2. TERMINOLOGY
+--------------
+  Sign-in session     The moment your user profile loads after credentials
+                      (or Windows Hello) succeed. This is distinct from
+                      "power on"; the machine may sit at the lock screen.
+
+  Cold start          First sign-in after boot. Network and audio stacks
+                      may still be negotiating; the product uses staged
+                      delays to reduce silent failures.
+
+  Interactive token   The scheduled task is registered for the installing
+                      user with LogonType Interactive so the assistant runs
+                      in a visible desktop context compatible with voice
+                      output and optional UI.
+
+
+3. ARCHITECTURE (HIGH LEVEL)
+----------------------------
+
+   [ Windows: User signs in ]
+              |
+              v
+   [ Task Scheduler: trigger "At log on" + configured delay ]
+              |
+              v
+   [ Action: VictusMorningBriefing.exe  --autostart ]
+   [ "Start in" (working directory): installation folder ]
+              |
+              v
+   [ Application: reads config.json, applies autostart timing profile,
+                   fetches content, speaks briefing ]
+
+The --autostart argument is the controlled channel that tells the runtime
+to apply the autostart-specific delay profile (distinct from a manual
+double-click). Environment parity with legacy launchers is preserved for
+advanced scenarios.
+
+
+4. SCHEDULED TASK CONTRACT
+--------------------------
+  Task name (canonical):     VictusMorningBriefing
+
+  Trigger:                   At log on (interactive user)
+  Delay:                     Configurable (default 45 seconds in template)
+  Action — Program:          <installDir>\VictusMorningBriefing.exe
+  Action — Arguments:        --autostart
+  Action — Start in:         <installDir>
+
+  Principal:                 Current user, interactive, limited elevation
+  Instance policy:           Ignore new instances if one is already active
+  Battery / AC:              Allowed on battery (typical laptop scenario)
+  Execution time limit:      Bounded window (prevents orphaned long runs)
+
+Re-registration is idempotent: running the installer again or the built-in
+registration helper overwrites the task definition with the same contract.
+
+
+5. INSTALLER PROVISIONING SEQUENCE
+----------------------------------
+The graphical installer performs, in order:
+
+  (a) File deployment — executable, templates, registration script.
+  (b) Configuration bootstrap — if config.json is absent, copy from the
+      shipped template so first launch does not block on manual file work.
+  (c) Primary registration — PowerShell-based task registration script.
+  (d) Secondary verification — executable --register-logon-task as a
+      resilience path if step (c) was intercepted by policy or security
+      software.
+
+You do not need to duplicate these steps unless you are repairing a machine
+where task creation is restricted.
+
+
+6. VERIFICATION (SUPPORT RUNBOOK)
+---------------------------------
+  A) Task Scheduler (GUI)
+     taskschd.msc  →  Task Scheduler Library  →  VictusMorningBriefing
+     Confirm trigger "At log on" and action pointing to your install path.
+
+  B) Command line (query)
+     schtasks /Query /TN "VictusMorningBriefing"
+
+  C) Log tail
+     %LOCALAPPDATA%\VictusVoiceAssistant\briefing.log
+     Successful provisioning emits a concise registration marker; failures
+     include a reason string suitable for escalation.
+
+
+7. COMMON CONSTRAINTS
+---------------------
+  • Managed PCs may disable user-created tasks — consult desktop support.
+  • Relocation of the folder after install invalidates the task action path;
+    reinstall or re-run registration from the new location.
+  • "Run at power button" without completing sign-in will not fire a user
+    logon trigger; this is expected Windows behavior.
+
+
+8. OPTIONAL ARTIFACTS
+----------------------
+  launch_exe_at_logon.cmd — legacy-compatible launcher; the installer’s
+  canonical contract is direct EXE invocation with --autostart.
+
+  register_logon_task_install.ps1 — same registration logic the installer
+  invokes; suitable for scripted redeployment.
+
+
+9. DOCUMENT CONTROL
+-------------------
+  Maintained with the Victus Voice Assistant release engineering package.
+  For source updates, see installer\VictusSetup.iss and victus\windows_*.py.
+
+================================================================================
+  End of integration guide
+================================================================================
