@@ -84,15 +84,27 @@ def run_setup_wizard(*, editing: bool = False) -> bool:
 
     row = ttk.Frame(frm)
     row.pack(fill=tk.X, **pad)
-    ttk.Label(row, text="Your name (footer shows: Built by …)", width=28).pack(side=tk.LEFT)
-    var_name = tk.StringVar(value=str(merged.get("overlay_credits_name", "")))
-    ttk.Entry(row, textvariable=var_name, width=32).pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-    row = ttk.Frame(frm)
-    row.pack(fill=tk.X, **pad)
-    ttk.Label(row, text="Greeting name (optional)", width=28).pack(side=tk.LEFT)
+    ttk.Label(row, text="Greeting name (what the assistant calls you)", width=36).pack(side=tk.LEFT)
     var_greet = tk.StringVar(value=str(merged.get("greeting_name", "")))
     ttk.Entry(row, textvariable=var_greet, width=32).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+    # Gender drives the honorific the assistant uses: "Rudraksh sir" vs "Neha ma'am".
+    row = ttk.Frame(frm)
+    row.pack(fill=tk.X, **pad)
+    ttk.Label(row, text="Address you as (sir / ma'am)", width=28).pack(side=tk.LEFT)
+    _GENDER_LABELS = {"male": "Male — sir", "female": "Female — ma'am", "none": "Don't add (use the name as-is)"}
+    _GENDER_VALUES = ("male", "female", "none")
+    initial_gender = str(merged.get("greeting_gender", "none")).lower().strip()
+    if initial_gender not in _GENDER_VALUES:
+        initial_gender = "none"
+    var_gender_label = tk.StringVar(value=_GENDER_LABELS[initial_gender])
+    ttk.Combobox(
+        row,
+        textvariable=var_gender_label,
+        values=tuple(_GENDER_LABELS[k] for k in _GENDER_VALUES),
+        width=32,
+        state="readonly",
+    ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     row = ttk.Frame(frm)
     row.pack(fill=tk.X, **pad)
@@ -156,8 +168,11 @@ def run_setup_wizard(*, editing: bool = False) -> bool:
         nc = max(1, min(10, nc))
 
         out = dict(merged)
-        out["overlay_credits_name"] = var_name.get().strip()
         out["greeting_name"] = var_greet.get().strip()
+        # Reverse-lookup the gender code from the friendly label.
+        chosen_label = var_gender_label.get().strip()
+        gender_code = next((k for k, v in _GENDER_LABELS.items() if v == chosen_label), "none")
+        out["greeting_gender"] = gender_code
         out["city"] = city
         out["tts_voice"] = voice
         out["briefing_language"] = str(var_lang.get()).strip() or "en"
