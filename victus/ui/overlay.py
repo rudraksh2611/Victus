@@ -16,6 +16,75 @@ from typing import Any
 from ..runtime_support import cfg_float
 
 # ---------------------------------------------------------------------------
+# Color palette — kept in one place so the look stays consistent.
+# ---------------------------------------------------------------------------
+
+_BG_OUTER = "#0c0c10"
+_BG_CARD = "#17171c"
+_BG_CARD_INNER = "#1c1c22"
+_BORDER = "#2a2a33"
+_ACCENT = "#7c3aed"
+_ACCENT_SOFT = "#4c1d95"
+_ACCENT_CYAN = "#22d3ee"
+_ACCENT_PINK = "#c026d3"
+_TEXT = "#f4f4f5"
+_TEXT_DIM = "#a1a1aa"
+_TEXT_MUTED = "#71717a"
+_DANGER = "#f87171"
+_SUCCESS = "#4ade80"
+
+_PHASE_ORDER = ("countdown", "waiting_net", "preparing", "speaking")
+
+
+# 5x7 bitmap font for the LED-style ticker shown during waiting / preparing.
+# Each row is encoded as a 5-bit integer with the leftmost pixel in bit 4.
+# Only the characters needed for current ticker messages are encoded —
+# extend if you add new strings.
+_FONT_5X7: dict[str, list[int]] = {
+    "A": [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001],
+    "B": [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110],
+    "C": [0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110],
+    "D": [0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110],
+    "E": [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111],
+    "F": [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000],
+    "G": [0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01110],
+    "H": [0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001],
+    "I": [0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+    "K": [0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001],
+    "L": [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111],
+    "M": [0b10001, 0b11011, 0b10101, 0b10001, 0b10001, 0b10001, 0b10001],
+    "N": [0b10001, 0b11001, 0b10101, 0b10101, 0b10011, 0b10001, 0b10001],
+    "O": [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
+    "P": [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000],
+    "R": [0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001],
+    "S": [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110],
+    "T": [0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100],
+    "U": [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
+    "V": [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100],
+    "W": [0b10001, 0b10001, 0b10001, 0b10001, 0b10101, 0b11011, 0b10001],
+    "Y": [0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100],
+    " ": [0, 0, 0, 0, 0, 0, 0],
+    ".": [0, 0, 0, 0, 0, 0, 0b00100],
+    "•": [0, 0, 0, 0b00100, 0b01110, 0b00100, 0],
+}
+
+
+def _hex_to_rgb(c: str) -> tuple[int, int, int]:
+    c = c.lstrip("#")
+    return int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16)
+
+
+def _rgb_to_hex(r: int, g: int, b: int) -> str:
+    return "#%02x%02x%02x" % (max(0, min(r, 255)), max(0, min(g, 255)), max(0, min(b, 255)))
+
+
+def _lerp_color(c1: str, c2: str, t: float) -> str:
+    r1, g1, b1 = _hex_to_rgb(c1)
+    r2, g2, b2 = _hex_to_rgb(c2)
+    return _rgb_to_hex(int(r1 + (r2 - r1) * t), int(g1 + (g2 - g1) * t), int(b1 + (b2 - b1) * t))
+
+
+# ---------------------------------------------------------------------------
 # Child process: must be picklable for Windows "spawn" — keep at module level.
 # ---------------------------------------------------------------------------
 
@@ -38,10 +107,10 @@ def _geom_from_cfg(cfg: dict) -> dict:
         # Left: transcript rectangle | Right: circle (diameter = circle_d)
         win_w = max(420, circle_d + 24 + int(text_cols * 7.2))
     win_w = max(380, min(win_w, 900))
-    win_h = int(cfg.get("overlay_window_height", 248))
-    win_h = max(200, min(win_h, 800))
-    credits = str(cfg.get("overlay_credits_name", "")).strip()
-    footer_text = f"Built by {credits}" if credits else "Built by"
+    win_h = int(cfg.get("overlay_window_height", 240))
+    win_h = max(220, min(win_h, 800))
+    # Footer is fixed: this is the author credit, not a per-user setting.
+    footer_text = "Built by Rudraksh"
 
     return {
         "canvas_w": circle_d,
@@ -64,8 +133,8 @@ def _overlay_main(
     from tkinter import font as tkfont
 
     geom = geom or {}
-    win_w = int(geom.get("win_w", 420))
-    win_h = int(geom.get("win_h", 248))
+    win_w = int(geom.get("win_w", 460))
+    win_h = int(geom.get("win_h", 268))
     circle_d = int(geom.get("canvas_w", 64))
     text_cols = int(geom.get("text_cols", 48))
     text_lines = int(geom.get("text_lines", 4))
@@ -75,8 +144,9 @@ def _overlay_main(
     root.title("Victus")
     root.overrideredirect(True)
     root.attributes("-topmost", True)
+    # Start invisible; fade in once layout is computed for a polished entrance.
     try:
-        root.attributes("-alpha", 0.94)
+        root.attributes("-alpha", 0.0)
     except tk.TclError:
         pass
 
@@ -88,19 +158,107 @@ def _overlay_main(
     x = max(0, sw - w - margin)
     y = max(0, sh - h - margin - 48)
     root.geometry(f"{w}x{h}+{x}+{y}")
+    root.configure(bg=_BG_OUTER)
 
-    bg = "#1c1c1e"
-    root.configure(bg=bg)
+    # Card: thin border + accent strip at top to give the panel identity.
+    card = tk.Frame(
+        root,
+        bg=_BG_CARD,
+        highlightthickness=1,
+        highlightbackground=_BORDER,
+        highlightcolor=_BORDER,
+    )
+    card.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
 
-    outer = tk.Frame(root, bg=bg, padx=12, pady=14)
+    # Animated gradient strip across the top of the card. Three colour stops
+    # (purple → magenta → cyan) shift slowly so the card feels alive even when
+    # the briefing is idle.
+    _strip_h = 4
+    accent_strip = tk.Canvas(
+        card, bg=_BG_CARD, height=_strip_h, highlightthickness=0, borderwidth=0
+    )
+    accent_strip.pack(fill=tk.X, side=tk.TOP)
+    _strip_state: dict[str, Any] = {"phase": 0.0, "after_id": None, "w": win_w}
+
+    def _draw_gradient_strip() -> None:
+        accent_strip.delete("all")
+        w = max(1, accent_strip.winfo_width() or _strip_state["w"])
+        ph = _strip_state["phase"]
+        stops = (_ACCENT, _ACCENT_PINK, _ACCENT_CYAN, _ACCENT)
+        n = len(stops) - 1
+        # Pre-compute gradient pixels in 2-pixel steps for smooth-but-cheap drawing.
+        step = 2
+        for x in range(0, w, step):
+            t = ((x / max(w - 1, 1)) + ph) % 1.0
+            seg = min(int(t * n), n - 1)
+            local_t = t * n - seg
+            color = _lerp_color(stops[seg], stops[seg + 1], local_t)
+            accent_strip.create_rectangle(x, 0, x + step, _strip_h, fill=color, outline="")
+
+    def _animate_strip() -> None:
+        _strip_state["phase"] = (_strip_state["phase"] + 0.0035) % 1.0
+        _draw_gradient_strip()
+        _strip_state["after_id"] = root.after(70, _animate_strip)
+
+    outer = tk.Frame(card, bg=_BG_CARD, padx=16, pady=14)
     outer.pack(fill=tk.BOTH, expand=True)
 
-    title_font = tkfont.Font(family="Segoe UI", size=11, weight="normal")
-    big_font = tkfont.Font(family="Segoe UI Semibold", size=44, weight="bold")
+    title_font = tkfont.Font(family="Segoe UI Semibold", size=10)
+    big_font = tkfont.Font(family="Segoe UI", size=32, weight="normal")
     sub_font = tkfont.Font(family="Segoe UI", size=10)
+    btn_font = tkfont.Font(family="Segoe UI Semibold", size=9)
 
-    title_row = tk.Frame(outer, bg=bg)
+    # ---- Title row: status dot + label + phase indicator + close × ----------
+    title_row = tk.Frame(outer, bg=_BG_CARD)
     title_row.pack(fill=tk.X)
+
+    # Status dot: a pulsing ring (rendered for cyan/success states) wraps a
+    # solid centre dot. Both share one Canvas so the pulse is GPU-cheap.
+    _DOT_BOX = 18
+    dot = tk.Canvas(
+        title_row, width=_DOT_BOX, height=_DOT_BOX, bg=_BG_CARD, highlightthickness=0
+    )
+    dot.pack(side=tk.LEFT, padx=(0, 8), pady=(2, 0))
+    _dot_state: dict[str, Any] = {"color": _ACCENT, "phase": 0.0}
+
+    def _redraw_dot() -> None:
+        dot.delete("all")
+        c = _dot_state["color"]
+        cx = cy = _DOT_BOX / 2.0
+        animate = c in (_ACCENT_CYAN, _SUCCESS)
+        if animate:
+            # Outer halo: expanding ring that fades each cycle.
+            k = (math.sin(_dot_state["phase"]) + 1.0) * 0.5  # 0..1
+            ring_r = 4.6 + 3.2 * k
+            # Tint the halo with the dot colour, blended toward the card bg
+            # to fake transparency.
+            halo = _lerp_color(_BG_CARD, c, max(0.18, 0.55 - 0.4 * k))
+            dot.create_oval(cx - ring_r, cy - ring_r, cx + ring_r, cy + ring_r, outline=halo, width=1)
+            r_inner = 4.0 + 0.6 * k
+        else:
+            r_inner = 4.5
+        dot.create_oval(cx - r_inner, cy - r_inner, cx + r_inner, cy + r_inner, fill=c, outline="")
+
+    def _animate_dot() -> None:
+        _dot_state["phase"] += 0.15
+        if _dot_state["color"] in (_ACCENT_CYAN, _SUCCESS):
+            _redraw_dot()
+        # Active phase dot also breathes — same clock so animations stay in sync.
+        try:
+            _draw_phase_dots()
+        except tk.TclError:
+            pass
+        root.after(60, _animate_dot)
+
+    title_lbl = tk.Label(
+        title_row,
+        text="Victus",
+        fg=_TEXT,
+        bg=_BG_CARD,
+        font=title_font,
+        anchor="w",
+    )
+    title_lbl.pack(side=tk.LEFT)
 
     def on_close_speaking() -> None:
         try:
@@ -108,50 +266,152 @@ def _overlay_main(
         except Exception:
             pass
         try:
-            close_spk_btn.config(state=tk.DISABLED)
+            close_spk_btn.config(state=tk.DISABLED, fg=_TEXT_MUTED)
         except tk.TclError:
             pass
 
     close_spk_btn = tk.Button(
         title_row,
-        text="×",
+        text="✕",
         font=title_font,
-        fg="#fca5a5",
-        bg=bg,
-        activebackground="#3f3f46",
-        activeforeground="#ffffff",
+        fg=_TEXT_DIM,
+        bg=_BG_CARD,
+        activebackground=_BG_CARD_INNER,
+        activeforeground=_DANGER,
         borderwidth=0,
         highlightthickness=0,
         relief=tk.FLAT,
         cursor="hand2",
-        padx=2,
+        padx=6,
         pady=0,
         command=on_close_speaking,
     )
-    title_lbl = tk.Label(title_row, text="Victus", fg="#8e8e93", bg=bg, font=title_font, anchor="w")
-    title_lbl.pack(side=tk.LEFT, padx=(2, 0))
 
-    body = tk.Frame(outer, bg=bg)
-    body.pack(fill=tk.BOTH, expand=True)
+    def _on_close_hover_enter(_e: object) -> None:
+        try:
+            close_spk_btn.config(fg=_DANGER)
+        except tk.TclError:
+            pass
 
-    speaking_split = tk.Frame(body, bg=bg)
+    def _on_close_hover_leave(_e: object) -> None:
+        try:
+            close_spk_btn.config(fg=_TEXT_DIM)
+        except tk.TclError:
+            pass
+
+    close_spk_btn.bind("<Enter>", _on_close_hover_enter)
+    close_spk_btn.bind("<Leave>", _on_close_hover_leave)
+
+    # Phase progress dots: 4 small circles in the title row that show how far
+    # the briefing has advanced (countdown → connecting → preparing → speaking).
+    _PHASE_DOT_COUNT = 4
+    _PHASE_DOT_GAP = 12
+    _PHASE_DOT_W = (_PHASE_DOT_COUNT - 1) * _PHASE_DOT_GAP + 12
+    phase_canvas = tk.Canvas(
+        title_row,
+        width=_PHASE_DOT_W,
+        height=_DOT_BOX,
+        bg=_BG_CARD,
+        highlightthickness=0,
+    )
+    phase_canvas.pack(side=tk.RIGHT, padx=(8, 8))
+
+    def _draw_phase_dots() -> None:
+        phase_canvas.delete("all")
+        ph = state.get("phase", "countdown")
+        if ph == "done":
+            cur = _PHASE_DOT_COUNT  # all complete
+            done_color = _SUCCESS
+            active_color = _SUCCESS
+        elif ph == "error":
+            cur = -1
+            done_color = _DANGER
+            active_color = _DANGER
+        elif ph in _PHASE_ORDER:
+            cur = _PHASE_ORDER.index(ph)
+            done_color = _SUCCESS
+            active_color = _ACCENT_CYAN if ph in ("waiting_net", "preparing") else _ACCENT
+            if ph == "speaking":
+                active_color = _SUCCESS
+        else:
+            cur = 0
+            done_color = _SUCCESS
+            active_color = _ACCENT
+        cy = _DOT_BOX / 2.0
+        for i in range(_PHASE_DOT_COUNT):
+            cx = 6 + i * _PHASE_DOT_GAP
+            if i < cur:
+                # completed
+                phase_canvas.create_oval(cx - 3, cy - 3, cx + 3, cy + 3, fill=done_color, outline="")
+            elif i == cur:
+                # active — slightly bigger + halo
+                k = (math.sin(_dot_state["phase"]) + 1.0) * 0.5
+                halo_r = 5.5 + 1.0 * k
+                halo = _lerp_color(_BG_CARD, active_color, 0.35)
+                phase_canvas.create_oval(cx - halo_r, cy - halo_r, cx + halo_r, cy + halo_r, outline=halo, width=1)
+                phase_canvas.create_oval(cx - 3.5, cy - 3.5, cx + 3.5, cy + 3.5, fill=active_color, outline="")
+            else:
+                phase_canvas.create_oval(cx - 2.5, cy - 2.5, cx + 2.5, cy + 2.5, fill="#3a3a44", outline="")
 
     footer_font = tkfont.Font(family="Segoe UI", size=8)
-    footer_text = str(geom.get("footer_text", "Built by"))
-    footer_lbl = tk.Label(outer, text=footer_text, fg="#636366", bg=bg, font=footer_font, anchor="e")
+    footer_text = str(geom.get("footer_text", "Built by Rudraksh"))
+    footer_lbl = tk.Label(outer, text=footer_text, fg=_TEXT_MUTED, bg=_BG_CARD, font=footer_font, anchor="e")
+    # Pack footer first at the bottom so body's expand=True can't push it off-screen.
+    footer_lbl.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 0))
 
-    # Countdown / status text
-    num_lbl = tk.Label(body, text="25", fg="white", bg=bg, font=big_font)
-    sub_lbl = tk.Label(body, text="Starting briefing", fg="#aeaeb2", bg=bg, font=sub_font)
+    body = tk.Frame(outer, bg=_BG_CARD)
+    body.pack(fill=tk.BOTH, expand=True, pady=(8, 0))
 
+    speaking_split = tk.Frame(body, bg=_BG_CARD)
+
+    # ---- Countdown: circular progress ring around the number ------------------
+    ring_size = 96
+    ring_canvas = tk.Canvas(body, width=ring_size, height=ring_size, bg=_BG_CARD, highlightthickness=0)
+    sub_lbl = tk.Label(body, text="Starting briefing", fg=_TEXT_DIM, bg=_BG_CARD, font=sub_font)
+
+    def _draw_countdown_ring(remaining: int, total: int) -> None:
+        ring_canvas.delete("all")
+        cx = cy = ring_size / 2.0
+        r = ring_size / 2.0 - 8
+        # Outer halo: a wider, darker arc behind the main ring fakes a glow.
+        halo_r = r + 5
+        halo = _lerp_color(_BG_CARD, _ACCENT, 0.22)
+        ring_canvas.create_oval(cx - halo_r, cy - halo_r, cx + halo_r, cy + halo_r, outline=halo, width=2)
+        # Track
+        ring_canvas.create_oval(cx - r, cy - r, cx + r, cy + r, outline=_BORDER, width=5)
+        # Progress arc (counter-clockwise from top), with a brighter cap dot
+        # at the leading edge for a bit of motion / liveliness.
+        if total > 0:
+            frac = max(0.0, min(1.0, remaining / float(total)))
+            extent = -360.0 * frac
+            if abs(extent) > 0.1:
+                ring_canvas.create_arc(
+                    cx - r, cy - r, cx + r, cy + r,
+                    start=90, extent=extent,
+                    style=tk.ARC, outline=_ACCENT, width=5,
+                )
+                # Leading cap: small bright disc at the end of the arc.
+                tip_angle_deg = 90.0 + extent
+                tip_rad = math.radians(tip_angle_deg)
+                tx = cx + r * math.cos(tip_rad)
+                ty = cy - r * math.sin(tip_rad)
+                ring_canvas.create_oval(tx - 4, ty - 4, tx + 4, ty + 4, fill=_ACCENT_PINK, outline="")
+        # Number in the centre. (Smaller ring; "seconds" subtitle dropped.)
+        ring_canvas.create_text(
+            cx, cy,
+            text=str(max(0, int(remaining))),
+            fill=_TEXT, font=big_font,
+        )
+
+    # ---- Stop button: pill with hover ----------------------------------------
     def on_stop_briefing() -> None:
         try:
             feedback_queue.put_nowait({"cmd": "cancel"})
         except Exception:
             pass
         try:
-            stop_btn.config(state=tk.DISABLED)
-            sub_lbl.config(text="Stopping…", fg="#f87171")
+            stop_btn.config(state=tk.DISABLED, bg=_BG_CARD_INNER, fg=_TEXT_MUTED)
+            sub_lbl.config(text="Stopping…", fg=_DANGER)
         except tk.TclError:
             pass
 
@@ -159,19 +419,37 @@ def _overlay_main(
         body,
         text="Stop",
         command=on_stop_briefing,
-        fg="#ffffff",
-        bg="#48484a",
-        activebackground="#5c5c5e",
-        activeforeground="#ffffff",
-        font=sub_font,
-        padx=14,
-        pady=5,
+        fg=_TEXT,
+        bg="#3f3f46",
+        activebackground="#52525b",
+        activeforeground=_TEXT,
+        font=btn_font,
+        padx=18,
+        pady=6,
         cursor="hand2",
         relief=tk.FLAT,
         highlightthickness=0,
+        borderwidth=0,
     )
 
-    # Speaking: transcript (left) + circular waveform (right)
+    def _on_stop_hover_enter(_e: object) -> None:
+        try:
+            if stop_btn["state"] != tk.DISABLED:
+                stop_btn.config(bg="#52525b")
+        except tk.TclError:
+            pass
+
+    def _on_stop_hover_leave(_e: object) -> None:
+        try:
+            if stop_btn["state"] != tk.DISABLED:
+                stop_btn.config(bg="#3f3f46")
+        except tk.TclError:
+            pass
+
+    stop_btn.bind("<Enter>", _on_stop_hover_enter)
+    stop_btn.bind("<Leave>", _on_stop_hover_leave)
+
+    # ---- Speaking: transcript (left) + circular waveform (right) -------------
     code_font = tkfont.Font(family="Consolas", size=code_font_size)
     code_font_b = tkfont.Font(family="Consolas", size=code_font_size, weight="bold")
     text_w = tk.Text(
@@ -183,11 +461,11 @@ def _overlay_main(
         fg="#7dd3fc",
         font=code_font,
         relief=tk.FLAT,
-        padx=4,
-        pady=4,
+        padx=8,
+        pady=6,
         highlightthickness=1,
-        highlightbackground="#30363d",
-        highlightcolor="#30363d",
+        highlightbackground=_BORDER,
+        highlightcolor=_BORDER,
         borderwidth=0,
         cursor="",
         takefocus=0,
@@ -196,18 +474,134 @@ def _overlay_main(
     text_w.tag_configure("dim", foreground="#7dd3fc", font=code_font)
     text_w.tag_configure("hi", foreground="#4ade80", font=code_font_b)
     text_w.tag_configure("cursor", foreground="#22d3ee", font=code_font_b)
-    text_w.tag_configure("err", foreground="#fca5a5", font=code_font)
+    text_w.tag_configure("err", foreground=_DANGER, font=code_font)
 
     # Right: square frame containing a circular speaking graphic (see draw_siri_waveform)
-    wave_wrap = tk.Frame(speaking_split, width=circle_d, height=circle_d, bg=bg)
+    wave_wrap = tk.Frame(speaking_split, width=circle_d, height=circle_d, bg=_BG_CARD)
     wave_wrap.pack_propagate(False)
-    canvas = tk.Canvas(wave_wrap, width=circle_d, height=circle_d, bg=bg, highlightthickness=0)
+    canvas = tk.Canvas(wave_wrap, width=circle_d, height=circle_d, bg=_BG_CARD, highlightthickness=0)
     canvas.pack(anchor="center")
     cw = circle_d
+
+    # ---- LED-matrix style scrolling ticker (waiting / preparing) -------------
+    # A dark panel that renders text as 5x7 lit/dim dots and scrolls
+    # right-to-left. Pre-creates one rectangle per pixel and only updates the
+    # fill colour each frame so animation stays cheap.
+    _TICK_DOT = 10
+    _TICK_GAP = 4
+    _TICK_CELL = _TICK_DOT + _TICK_GAP  # 14 px per column / row
+    _TICK_ROWS = 7
+    _TICK_PAD = 10
+    _tick_width = max(320, min(win_w - 40, 480))
+    _tick_cols = max(1, (_tick_width - _TICK_PAD * 2) // _TICK_CELL)
+    _tick_height = _TICK_ROWS * _TICK_CELL + _TICK_PAD * 2
+    _TICK_BG = "#08090d"
+    _TICK_DIM = "#152a30"
+
+    ticker_frame = tk.Frame(
+        body, bg=_BG_CARD,
+        highlightthickness=1, highlightbackground=_BORDER, highlightcolor=_BORDER,
+    )
+    ticker_canvas = tk.Canvas(
+        ticker_frame, width=_tick_width, height=_tick_height,
+        bg=_TICK_BG, highlightthickness=0, borderwidth=0,
+    )
+    ticker_canvas.pack()
+
+    _tick_state: dict[str, Any] = {
+        "rects": [],
+        "text_cols": [],
+        "scroll": 0,
+    }
+
+    # Pre-create the dot grid once and reuse the rectangles.
+    for _x in range(_tick_cols):
+        col_rects: list[int] = []
+        for _y in range(_TICK_ROWS):
+            px = _TICK_PAD + _x * _TICK_CELL
+            py = _TICK_PAD + _y * _TICK_CELL
+            rect_id = ticker_canvas.create_rectangle(
+                px, py, px + _TICK_DOT, py + _TICK_DOT,
+                fill=_TICK_DIM, outline="",
+            )
+            col_rects.append(rect_id)
+        _tick_state["rects"].append(col_rects)
+
+    def _ticker_set(text: str) -> None:
+        cols: list[int] = []
+        # Lead with one screen of empty columns so the message enters from the
+        # right edge instead of starting half-drawn.
+        cols.extend([0] * _tick_cols)
+        for ch in text.upper():
+            glyph = _FONT_5X7.get(ch, _FONT_5X7[" "])
+            for col_idx in range(5):
+                col_bits = 0
+                for row_idx in range(_TICK_ROWS):
+                    if glyph[row_idx] & (1 << (4 - col_idx)):
+                        col_bits |= (1 << row_idx)
+                cols.append(col_bits)
+            cols.append(0)  # 1-col spacer between glyphs
+        # Trailing pad so it scrolls fully off before looping.
+        cols.extend([0] * _tick_cols)
+        _tick_state["text_cols"] = cols
+        _tick_state["scroll"] = 0
+        _ticker_render()
+
+    def _ticker_render() -> None:
+        cols = _tick_state["text_cols"]
+        if not cols:
+            return
+        n = len(cols)
+        s = _tick_state["scroll"]
+        rects = _tick_state["rects"]
+        for x in range(_tick_cols):
+            col_bits = cols[(s + x) % n]
+            for y in range(_TICK_ROWS):
+                lit = (col_bits >> y) & 1
+                color = _ACCENT_CYAN if lit else _TICK_DIM
+                try:
+                    ticker_canvas.itemconfig(rects[x][y], fill=color)
+                except tk.TclError:
+                    return
+
+    def _animate_ticker() -> None:
+        ph = state.get("phase") if "state" in dir() else None
+        # `state` is defined just below; use try/except to skip until ready.
+        try:
+            ph = state.get("phase")
+        except NameError:
+            ph = None
+        if ph in ("waiting_net", "preparing") and _tick_state["text_cols"]:
+            n = len(_tick_state["text_cols"])
+            _tick_state["scroll"] = (_tick_state["scroll"] + 1) % n
+            try:
+                _ticker_render()
+            except tk.TclError:
+                pass
+        root.after(45, _animate_ticker)
+
+    # ---- Done: animated green check ------------------------------------------
+    done_canvas = tk.Canvas(body, width=64, height=64, bg=_BG_CARD, highlightthickness=0)
+
+    def _draw_done() -> None:
+        done_canvas.delete("all")
+        cx = cy = 32
+        r = 26
+        done_canvas.create_oval(cx - r, cy - r, cx + r, cy + r, fill="#0e2316", outline=_SUCCESS, width=2)
+        done_canvas.create_line(cx - 10, cy + 1, cx - 2, cy + 9, fill=_SUCCESS, width=3, capstyle=tk.ROUND)
+        done_canvas.create_line(cx - 2, cy + 9, cx + 12, cy - 8, fill=_SUCCESS, width=3, capstyle=tk.ROUND)
+
+    # ---- Error: warning header ------------------------------------------------
+    err_header = tk.Frame(outer, bg=_BG_CARD)
+    err_icon = tk.Canvas(err_header, width=18, height=18, bg=_BG_CARD, highlightthickness=0)
+    err_icon.create_oval(1, 1, 17, 17, fill="#3a0f10", outline=_DANGER, width=1)
+    err_icon.create_text(9, 9, text="!", fill=_DANGER, font=tkfont.Font(family="Segoe UI Semibold", size=10))
+    err_label = tk.Label(err_header, text="Something went wrong", fg=_DANGER, bg=_BG_CARD, font=title_font, anchor="w")
 
     state: dict[str, Any] = {
         "phase": "countdown",
         "remaining": 25,
+        "countdown_total": 25,
         "anim_t": 0.0,
         "after_id": None,
         "words": [],
@@ -219,62 +613,111 @@ def _overlay_main(
     }
 
     def clear_body() -> None:
-        num_lbl.pack_forget()
+        ring_canvas.pack_forget()
         sub_lbl.pack_forget()
         stop_btn.pack_forget()
         canvas.pack_forget()
         wave_wrap.pack_forget()
         text_w.pack_forget()
+        try:
+            text_w.delete("1.0", tk.END)
+        except tk.TclError:
+            pass
         speaking_split.pack_forget()
+        done_canvas.pack_forget()
+        err_header.pack_forget()
+        err_icon.pack_forget()
+        err_label.pack_forget()
+        ticker_frame.pack_forget()
         try:
             close_spk_btn.pack_forget()
-            close_spk_btn.config(state=tk.NORMAL)
+            close_spk_btn.config(state=tk.NORMAL, fg=_TEXT_DIM)
         except tk.TclError:
             pass
         try:
+            title_lbl.config(text="Victus")
             title_lbl.pack_forget()
-            title_lbl.pack(side=tk.LEFT, padx=(2, 0), anchor="w")
+            title_lbl.pack(side=tk.LEFT)
         except tk.TclError:
             pass
+
+    def _set_dot(color: str) -> None:
+        _dot_state["color"] = color
+        _dot_state["phase"] = 0.0
+        _redraw_dot()
+        try:
+            _draw_phase_dots()
+        except tk.TclError:
+            pass
+
+    # Cycling "•••" indicator for connecting / preparing — a tiny touch that
+    # signals the app is alive without committing to a full spinner widget.
+    _activity_state: dict[str, Any] = {"base": "", "phase": 0}
+
+    def _animate_activity() -> None:
+        ph = state.get("phase")
+        if ph in ("waiting_net", "preparing") and _activity_state["base"]:
+            _activity_state["phase"] = (_activity_state["phase"] + 1) % 4
+            n = _activity_state["phase"]
+            dots = "•" * n + " " * (3 - n)
+            try:
+                sub_lbl.config(text=f"{_activity_state['base']}  {dots}")
+            except tk.TclError:
+                pass
+        root.after(280, _animate_activity)
 
     def show_countdown(n: int) -> None:
         clear_body()
         state["phase"] = "countdown"
-        num_lbl.config(text=str(max(0, int(n))))
-        sub_lbl.config(text="Starting briefing", fg="#aeaeb2")
+        _activity_state["base"] = ""
+        state["remaining"] = max(0, int(n))
+        # First tick locks in the total so the ring animates correctly.
+        if state["countdown_total"] < state["remaining"]:
+            state["countdown_total"] = state["remaining"]
+        if state["countdown_total"] <= 0:
+            state["countdown_total"] = max(1, state["remaining"])
+        _set_dot(_ACCENT)
+        title_lbl.config(text="Starting briefing")
+        sub_lbl.config(text="Briefing begins in a moment", fg=_TEXT_DIM)
         try:
-            stop_btn.config(state=tk.NORMAL)
+            stop_btn.config(state=tk.NORMAL, bg="#3f3f46", fg=_TEXT)
         except tk.TclError:
             pass
-        num_lbl.pack(pady=(4, 0))
+        _draw_countdown_ring(state["remaining"], state["countdown_total"])
+        ring_canvas.pack(pady=(2, 4))
         sub_lbl.pack()
         stop_btn.pack(pady=(10, 0))
 
     def show_waiting_net() -> None:
         clear_body()
         state["phase"] = "waiting_net"
-        num_lbl.config(text="")
-        sub_lbl.config(text="Connecting to network…", fg="#aeaeb2")
+        _set_dot(_ACCENT_CYAN)
+        title_lbl.config(text="Connecting")
+        _activity_state["base"] = ""  # ticker carries the message now
+        _ticker_set("WAITING FOR THE NETWORK   •••")
         try:
-            stop_btn.config(state=tk.NORMAL)
+            stop_btn.config(state=tk.NORMAL, bg="#3f3f46", fg=_TEXT)
         except tk.TclError:
             pass
-        sub_lbl.pack(pady=(18, 0))
-        stop_btn.pack(pady=(12, 0))
+        ticker_frame.pack(pady=(8, 2))
+        stop_btn.pack(pady=(8, 0))
 
     def show_preparing() -> None:
         clear_body()
         state["phase"] = "preparing"
-        sub_lbl.config(text="Preparing audio…", fg="#aeaeb2")
+        _set_dot(_ACCENT_CYAN)
+        title_lbl.config(text="Preparing")
+        _activity_state["base"] = ""
+        _ticker_set("RENDERING AUDIO   •••")
         try:
-            stop_btn.config(state=tk.NORMAL)
+            stop_btn.config(state=tk.NORMAL, bg="#3f3f46", fg=_TEXT)
         except tk.TclError:
             pass
-        sub_lbl.pack(pady=(18, 0))
-        stop_btn.pack(pady=(12, 0))
+        ticker_frame.pack(pady=(8, 2))
+        stop_btn.pack(pady=(8, 0))
 
     def show_error(err_text: str) -> None:
-        """Same Text widget as the transcript; waveform hidden."""
+        """Same Text widget as the transcript; waveform hidden; close × becomes dismiss."""
         if state.get("after_id"):
             try:
                 root.after_cancel(state["after_id"])
@@ -283,8 +726,11 @@ def _overlay_main(
             state["after_id"] = None
         clear_body()
         state["phase"] = "error"
-        sub_lbl.config(text="Something went wrong", fg="#f87171")
-        sub_lbl.pack(pady=(0, 4))
+        _set_dot(_DANGER)
+        title_lbl.config(text="Victus")
+        err_header.pack(fill=tk.X, pady=(0, 6))
+        err_icon.pack(side=tk.LEFT, padx=(0, 8))
+        err_label.pack(side=tk.LEFT)
         speaking_split.pack(fill=tk.BOTH, expand=True)
         text_w.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 0))
         text_w.delete("1.0", tk.END)
@@ -363,9 +809,11 @@ def _overlay_main(
         else:
             text_w.insert(tk.END, vis[: last_sp + 1], "dim")
             text_w.insert(tk.END, vis[last_sp + 1 :], "hi")
-        blink = (int(state.get("anim_t", 0) * 12) % 2) == 0
-        at_end = bool(target) and tc >= len(target)
-        if tc < len(target) or (at_end and blink):
+        # Cursor only while still typing — once the line is fully written we
+        # leave it clean so a trailing block glyph can't be misread as a stray
+        # letter when the briefing closes.
+        if tc < len(target):
+            blink = (int(state.get("anim_t", 0) * 12) % 2) == 0
             text_w.insert(tk.END, " ▌" if blink else " ▎", "cursor")
         try:
             text_w.see(tk.END)
@@ -479,16 +927,15 @@ def _overlay_main(
         state["p"] = 0.0
         state["line_target"] = ""
         state["typed_char_count"] = 0
-        sub_lbl.config(text="Voice assistant", fg="#ffffff")
-        sub_lbl.pack(pady=(0, 2))
+        _set_dot(_SUCCESS)
+        title_lbl.config(text="Voice assistant")
+        sub_lbl.config(text="", fg=_TEXT_DIM)
         speaking_split.pack(fill=tk.BOTH, expand=True)
-        text_w.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 6))
+        text_w.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
         wave_wrap.pack(side=tk.RIGHT, anchor=tk.CENTER)
         canvas.pack(anchor="center")
         try:
-            title_lbl.pack_forget()
-            close_spk_btn.pack(side=tk.LEFT, anchor="nw")
-            title_lbl.pack(side=tk.LEFT, padx=(6, 0), anchor="w")
+            close_spk_btn.pack(side=tk.RIGHT, anchor="ne")
         except tk.TclError:
             pass
         if state["after_id"]:
@@ -538,8 +985,12 @@ def _overlay_main(
             state["after_id"] = None
         clear_body()
         state["phase"] = "done"
-        sub_lbl.config(text="Briefing complete", fg="#8e8e93")
-        sub_lbl.pack(pady=(22, 0))
+        _set_dot(_SUCCESS)
+        title_lbl.config(text="Briefing complete")
+        _draw_done()
+        done_canvas.pack(pady=(20, 6))
+        sub_lbl.config(text="Have a great day", fg=_TEXT_DIM)
+        sub_lbl.pack()
 
     def apply_msg(msg: dict) -> None:
         cmd = msg.get("cmd")
@@ -596,8 +1047,36 @@ def _overlay_main(
             apply_speaking_tick(last_tick)
         root.after(16, poll_queue)
 
-    footer_lbl.pack(fill=tk.X, pady=(8, 0))
+    _redraw_dot()
+    _animate_dot()
     show_countdown(25)
+    root.update_idletasks()
+    _strip_state["w"] = max(_strip_state["w"], accent_strip.winfo_width())
+    _draw_gradient_strip()
+    _animate_strip()
+    _animate_activity()
+    _animate_ticker()
+
+    # Fade window in over ~280ms — alpha 0 → 0.96 in 14 ticks of 20ms each.
+    def _fade_in(step: int = 0) -> None:
+        target = 0.96
+        steps = 14
+        if step >= steps:
+            try:
+                root.attributes("-alpha", target)
+            except tk.TclError:
+                pass
+            return
+        try:
+            # Ease-out: faster early, smoother near the end.
+            t = step / float(steps)
+            ease = 1.0 - (1.0 - t) ** 2
+            root.attributes("-alpha", target * ease)
+        except tk.TclError:
+            pass
+        root.after(20, lambda: _fade_in(step + 1))
+
+    root.after(40, _fade_in)
     root.after(100, poll_queue)
     root.mainloop()
     root.destroy()
@@ -721,7 +1200,7 @@ class OverlayController:
     def briefing_done(self) -> None:
         """Short 'complete' state then close."""
         self._send({"cmd": "phase", "phase": "done"})
-        time.sleep(1.2)
+        time.sleep(1.6)
         self.quit()
 
     def quit(self) -> None:
