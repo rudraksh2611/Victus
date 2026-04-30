@@ -61,6 +61,8 @@ Designed for **automatic run at Windows sign-in** via Task Scheduler.
 | `VictusMorningBriefing.spec` | PyInstaller definition for a one-file `.exe` |
 | `build_windows.ps1` | Builds `dist\VictusMorningBriefing.exe` |
 | `installer\VictusSetup.iss` | Inno Setup script for `Output\VictusVoiceAssistant_Setup.exe` |
+| `installer\WizardBefore.txt` | Pre-install overview shown in the setup wizard |
+| `installer\WindowsIntegrationGuide.txt` | Task Scheduler / session integration reference (installed to `{app}`) |
 | `build_installer.ps1` | Builds `.exe` then runs Inno Setup (install Inno Setup 6 first) |
 | `requirements-build.txt` | Build-only dependency (`pyinstaller`) |
 | `TROUBLESHOOTING.txt` | Boot/runtime troubleshooting guide |
@@ -145,11 +147,14 @@ Output: **`dist\VictusMorningBriefing.exe`**. The build script also copies **`co
 ### Sharing with non-technical users (no code, no Notepad)
 
 - The **`.exe` already includes** Python and libraries (nothing extra to install from the web except normal Windows updates).
-- On **first run**, if there is **no** `config.json` next to the `.exe`, a **setup window** opens: name (for “Built by …”), city, voice, language, etc. Saving creates **`config.json`** in that same folder automatically.
+- **Windows installer (`VictusVoiceAssistant_Setup.exe`):** copies **`config.json`** from the template on first install and **registers** sign-in startup (Task Scheduler) automatically — no extra checkbox required.
+- On **first run** of a loose `.exe` only, if there is **no** `config.json` next to the `.exe`, a **setup window** opens. Saving creates **`config.json`** in that folder.
 - To **change settings later**, run **`VictusMorningBriefing.exe --setup`** (e.g. create a shortcut whose target is `"C:\Path\VictusMorningBriefing.exe" --setup`).
 - **Startup at login:** use **`launch_exe_at_logon.cmd`** as the scheduled task action (or the Python `setup_login_task.ps1` flow from source). Or run the `.exe` directly if you do not need autostart-only delays.
 
 ### Windows installer wizard (`VictusVoiceAssistant_Setup.exe`)
+
+The installer includes a **pre-install engineering overview** (`installer\WizardBefore.txt`), a **post-install quick guide**, and ships **`WindowsIntegrationGuide.txt`** into the program folder (Task Scheduler contract, verification runbook, support matrix).
 
 1. Install **[Inno Setup 6](https://jrsoftware.org/isinfo.php)** on your PC (default options are fine).
 2. From the project folder:
@@ -162,7 +167,7 @@ This runs `build_windows.ps1`, then compiles **`installer\VictusSetup.iss`**.
 
 3. Share **`Output\VictusVoiceAssistant_Setup.exe`**. End users run it like any normal Windows installer.
 
-The installer puts files under **`%LocalAppData%\Programs\VictusVoiceAssistant`** (no administrator rights required by default). **`config.json`** is created in that folder when they first run the app or complete the in-app setup wizard.
+The installer puts files under **`%LocalAppData%\Programs\VictusVoiceAssistant`** (no administrator rights required by default). It creates **`config.json`** from the template if missing and **always** registers the logon scheduled task so the briefing can run after each sign-in.
 
 #### Installer screens (step by step)
 
@@ -170,43 +175,30 @@ These images match the **Inno Setup 6** “modern” wizard defined in **`instal
 
 | Step | What you do |
 |------|-------------|
-| 1 | Welcome — click **Next**. |
-| 2 | **Select Destination Location** — default is fine (`…\VictusVoiceAssistant` under your user profile). Click **Next**. |
-| 3 | **Select Start Menu Folder** — default is fine. Click **Next**. |
-| 4 | **Select Additional Tasks** — under **Startup**, leave **“Run Victus automatically when I sign in to Windows…”** **checked** (default) so the app runs after each restart/sign-in via Task Scheduler. Optionally enable **Create a desktop icon**. Click **Next**. |
-| 5 | **Ready to Install** — click **Install**. |
-| 6 | **Installing** — wait for the progress bar. |
-| 7 | **Finished** — leave **“Launch Victus Voice Assistant”** checked if you want to open the app now. Click **Finish**. |
+| 1 | **Welcome** — click **Next**. |
+| 2 | **Important information** — read the deployment / session-integration overview (from `WizardBefore.txt`), then **Next**. |
+| 3 | **Select Destination Location** — default is fine (`…\VictusVoiceAssistant` under your user profile). Click **Next**. |
+| 4 | **Select Start Menu Folder** — default is fine. Click **Next**. |
+| 5 | **Select Additional Tasks** — optionally enable **Create a desktop icon**. Sign-in startup is configured automatically by the installer. Click **Next**. |
+| 6 | **Ready to Install** — click **Install**. |
+| 7 | **Installing** — wait for the progress bar. |
+| 8 | **Finished** — leave **“Launch Victus Voice Assistant”** checked if you want to open the app now. Click **Finish**. |
 
-**1 — Welcome**
+**1 — Welcome** — ![Installer welcome](docs/installer/screenshots/01-welcome.png)
 
-![Installer welcome](docs/installer/screenshots/01-welcome.png)
+**2 — Destination folder** (screenshot label may say “step 2” in older mockups) — ![Select destination location](docs/installer/screenshots/02-destination.png)
 
-**2 — Destination folder**
+**3 — Start Menu folder** — ![Select Start Menu folder](docs/installer/screenshots/03-startmenu.png)
 
-![Select destination location](docs/installer/screenshots/02-destination.png)
+**4 — Additional tasks** — ![Select Additional Tasks — Startup option](docs/installer/screenshots/04-additional-tasks.png)
 
-**3 — Start Menu folder**
+**5 — Ready to install** — ![Ready to Install](docs/installer/screenshots/05-ready.png)
 
-![Select Start Menu folder](docs/installer/screenshots/03-startmenu.png)
+**6 — Installing** — ![Installing](docs/installer/screenshots/06-installing.png)
 
-**4 — Additional tasks (startup at sign-in — default ON)**
+**7 — Finished** — ![Setup finished](docs/installer/screenshots/07-finished.png)
 
-This is the screen with the **default-checked** option to run Victus after every Windows sign-in (restart or login).
-
-![Select Additional Tasks — Startup option](docs/installer/screenshots/04-additional-tasks.png)
-
-**5 — Ready to install**
-
-![Ready to Install](docs/installer/screenshots/05-ready.png)
-
-**6 — Installing**
-
-![Installing](docs/installer/screenshots/06-installing.png)
-
-**7 — Finished**
-
-![Setup finished](docs/installer/screenshots/07-finished.png)
+*(The live installer also shows an **Important information** page after Welcome; screenshots are illustrative.)*
 
 ---
 
