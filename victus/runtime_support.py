@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -58,20 +59,74 @@ def load_config() -> dict:
         )
         raise FileNotFoundError(f"Missing {CONFIG_PATH.name}. {hint}")
     # Accept UTF-8 with/without BOM (PowerShell may save JSON with BOM).
-    with open(CONFIG_PATH, encoding="utf-8-sig") as f:
-        return json.load(f)
+    try:
+        with open(CONFIG_PATH, encoding="utf-8-sig") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"{CONFIG_PATH.name} is not valid JSON ({e.msg} at line {e.lineno}). "
+            "Re-run setup or fix the file."
+        ) from e
+    if not isinstance(data, dict):
+        raise ValueError(f"{CONFIG_PATH.name} must contain a JSON object at the top level.")
+    return data
 
 
 def cfg_float(cfg: dict, key: str, default: float, low: float, high: float) -> float:
-    value = float(cfg.get(key, default))
+    raw = cfg.get(key, default)
+    try:
+        value = float(raw) if raw is not None else float(default)
+    except (TypeError, ValueError):
+        value = float(default)
     return max(low, min(value, high))
 
 
-def http_get(url: str, *, timeout: float, params: dict | None = None) -> requests.Response:
-    return requests.get(url, timeout=timeout, params=params)
+# ---------------------------------------------------------------------------
+# HTTP with retry/backoff — transient network blips should not kill briefings
+# ---------------------------------------------------------------------------
+
+_TRANSIENT_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 
 
-def http_get_json(url: str, *, timeout: float, params: dict | None = None) -> dict:
-    response = http_get(url, timeout=timeout, params=params)
+def http_get(
+    url: str,
+    *,
+    timeout: float,
+    params: dict | None = None,
+    retries: int = 3,
+    backoff: float = 0.6,
+) -> requests.Response:
+    """GET with bounded retries on connection errors / transient 5xx responses."""
+    last_exc: BaseException | None = None
+    attempts = max(1, int(retries))
+    for attempt in range(1, attempts + 1):
+        try:
+            response = requests.get(url, timeout=timeout, params=params)
+            if response.status_code in _TRANSIENT_STATUSES and attempt < attempts:
+                autostart_log(f"http_get transient {response.status_code} for {url} (attempt {attempt})")
+                time.sleep(backoff * attempt)
+                continue
+            return response
+        except (requests.ConnectionError, requests.Timeout) as e:
+            last_exc = e
+            autostart_log(f"http_get attempt {attempt} for {url} failed: {e!r}")
+            if attempt < attempts:
+                time.sleep(backoff * attempt)
+        except requests.RequestException as e:
+            last_exc = e
+            break
+    assert last_exc is not None
+    raise last_exc
+
+
+def http_get_json(
+    url: str,
+    *,
+    timeout: float,
+    params: dict | None = None,
+    retries: int = 3,
+    backoff: float = 0.6,
+) -> dict:
+    response = http_get(url, timeout=timeout, params=params, retries=retries, backoff=backoff)
     response.raise_for_status()
     return response.json()
