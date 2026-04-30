@@ -1,0 +1,19 @@
+HOW TO SEE THE FULL INSTALLER (overview pages, version 1.0.2+)
+================================================================
+
+1) Run THIS file only for setup:
+   VictusVoiceAssistant_Setup.exe
+   (NOT VictusMorningBriefing.exe - that is the app, not the installer.)
+
+2) Rebuild the setup after changing installer\*.txt or VictusSetup.iss:
+   powershell -ExecutionPolicy Bypass -File .\build_installer.ps1
+   Output: Output\VictusVoiceAssistant_Setup.exe
+
+3) If Victus was already installed from an older setup, Windows may open
+   "Modify / Repair / Remove" instead of the full wizard. To see every page
+   including "Important information":
+   - Settings -> Apps -> uninstall "Victus Voice Assistant", then
+   - Run the new VictusVoiceAssistant_Setup.exe again.
+
+4) In Apps -> Installed apps, the version should show 1.0.2 when the new
+   build is installed.
