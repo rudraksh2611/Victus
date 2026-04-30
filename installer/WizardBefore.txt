@@ -1,0 +1,37 @@
+  VICTUS VOICE ASSISTANT
+  A short, friendly daily briefing for Windows.
+
+  WHAT YOU GET
+  ------------
+  * A spoken morning briefing — greeting, time, weather for your city,
+    and the day's top headlines.
+  * A small overlay near the bottom-right of the screen so you can
+    follow along or stop the briefing with one click.
+  * Optional autostart at sign-in so the briefing plays itself once
+    your laptop is awake and online.
+
+  WHAT THIS INSTALLER DOES
+  ------------------------
+  * Copies the application into your user profile folder. No admin rights
+    are required — nothing is written to system-wide locations.
+  * Drops a default settings file in the install folder. You can change
+    your city, name, voice, and language in the next step.
+  * If you choose, registers a Windows sign-in task that launches the
+    briefing for you each morning, after a small delay so audio and
+    network are ready.
+
+  ABOUT THE SMARTSCREEN WARNING
+  -----------------------------
+  Windows may show "Windows protected your PC" the first time you run an
+  unknown publisher. Click "More info" and then "Run anyway" if you trust
+  this download. This setup writes only inside your user profile.
+
+  CONTROL OVER WHAT'S INSTALLED
+  -----------------------------
+  On the next screen you can pick:
+    * whether Victus starts automatically at sign-in
+    * whether to open the settings wizard now (recommended on first install)
+    * whether to add a desktop shortcut
+
+  ----------------------------------------------------------------------
+  Click Next to continue. You can cancel any time before installation.
