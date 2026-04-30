@@ -1,7 +1,13 @@
 """
 Register / unregister Windows Task Scheduler logon task for the frozen .exe build.
 
-Uses the same task name as setup_login_task.ps1 so the Python and exe flows share one slot.
+Two registration strategies are tried in order so a single failing path does
+not leave the user without autostart:
+
+  A) PowerShell + ScheduledTasks module (Register-ScheduledTask)
+  B) schtasks.exe /Create /XML with hand-rolled task XML
+
+After either, schtasks.exe /Query verifies the task actually exists.
 """
 from __future__ import annotations
 
@@ -9,6 +15,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from .runtime_support import PROJECT_ROOT, autostart_log
@@ -23,75 +30,50 @@ def install_directory() -> Path:
     return PROJECT_ROOT.resolve()
 
 
+def _run(cmd: list[str], *, timeout: float = 60.0) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        creationflags=_CREATE_FLAGS,
+    )
+
+
 def is_logon_task_registered() -> bool:
     if sys.platform != "win32":
         return False
     try:
-        r = subprocess.run(
-            ["schtasks", "/Query", "/TN", TASK_NAME],
-            capture_output=True,
-            text=True,
-            timeout=30,
-            creationflags=_CREATE_FLAGS,
-        )
+        r = _run(["schtasks", "/Query", "/TN", TASK_NAME], timeout=30)
         return r.returncode == 0
     except Exception:
         return False
 
 
-def register_logon_task(*, delay_seconds: int = 45) -> tuple[bool, str]:
-    """Create / overwrite the logon task pointing at launch_exe_at_logon.cmd or the exe."""
-    if sys.platform != "win32":
-        return False, "Windows only"
+def _user_id() -> str:
+    domain = os.environ.get("USERDOMAIN", "")
+    user = os.environ.get("USERNAME", "")
+    computer = os.environ.get("COMPUTERNAME", "")
+    if domain and domain != computer:
+        return f"{domain}\\{user}"
+    return user
 
-    install_dir = install_directory()
-    launcher = install_dir / "launch_exe_at_logon.cmd"
-    exe = install_dir / "VictusMorningBriefing.exe"
 
-    if not launcher.exists() and not exe.exists():
-        return False, f"No VictusMorningBriefing.exe (or launch_exe_at_logon.cmd) in {install_dir}"
-
-    delay_seconds = max(0, min(int(delay_seconds), 600))
+def _try_register_via_powershell(install_dir: Path, delay_seconds: int) -> tuple[bool, str]:
     install_dir_ps = str(install_dir.resolve())
-
-    if launcher.exists():
-        action_block = """
+    user_id = _user_id()
+    user = os.environ.get("USERNAME", "")
+    script = f"""
+$ErrorActionPreference = "Stop"
+$taskName = "{TASK_NAME}"
 $installDir = @'
-%s
-'@.Trim()
-$launcher = Join-Path $installDir 'launch_exe_at_logon.cmd'
-$action = New-ScheduledTaskAction -Execute $launcher -WorkingDirectory $installDir
-""" % (
-            install_dir_ps,
-        )
-    else:
-        action_block = """
-$installDir = @'
-%s
+{install_dir_ps}
 '@.Trim()
 $exe = Join-Path $installDir 'VictusMorningBriefing.exe'
-$arg = "/c set `"VICTUS_AUTOSTART=1`" && cd /d `"$installDir`" && `"$exe`""
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument $arg
-""" % (
-            install_dir_ps,
-        )
-
-    script = (
-        """
-$ErrorActionPreference = "Stop"
-$taskName = "%s"
-"""
-        % (TASK_NAME,)
-        + action_block.strip()
-        + """
-$userId = if ($env:USERDOMAIN -and $env:USERDOMAIN -ne $env:COMPUTERNAME) {
-    "$env:USERDOMAIN\\$env:USERNAME"
-} else {
-    $env:USERNAME
-}
-$trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
-$trigger.Delay = "PT%sS"
-$principal = New-ScheduledTaskPrincipal -UserId $userId -LogonType Interactive -RunLevel Limited
+$action = New-ScheduledTaskAction -Execute $exe -Argument '--autostart' -WorkingDirectory $installDir
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User '{user}'
+$trigger.Delay = "PT{delay_seconds}S"
+$principal = New-ScheduledTaskPrincipal -UserId '{user_id}' -LogonType Interactive -RunLevel Limited
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
@@ -100,24 +82,15 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
 """
-        % (delay_seconds,)
-    )
-
     try:
         with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".ps1",
-            delete=False,
-            encoding="utf-8-sig",
+            mode="w", suffix=".ps1", delete=False, encoding="utf-8-sig"
         ) as tmp:
             tmp.write(script)
             path = tmp.name
-        r = subprocess.run(
+        r = _run(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path],
-            capture_output=True,
-            text=True,
             timeout=120,
-            creationflags=_CREATE_FLAGS,
         )
         try:
             os.unlink(path)
@@ -126,31 +99,143 @@ Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Pr
         if r.returncode != 0:
             err = (r.stderr or r.stdout or "").strip()
             return False, err or f"exit {r.returncode}"
-        autostart_log("windows logon task registered")
         return True, ""
     except Exception as e:
         return False, str(e)
+
+
+def _try_register_via_schtasks_xml(install_dir: Path, delay_seconds: int) -> tuple[bool, str]:
+    """Fallback: write a Task Scheduler XML file and import via schtasks.exe.
+
+    Avoids the ScheduledTasks PowerShell module entirely, which helps when
+    AV / policy software intercepts module loading.
+    """
+    from xml.sax.saxutils import escape
+
+    exe = (install_dir / "VictusMorningBriefing.exe").resolve()
+    user_id = _user_id()
+    now_iso = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    xml = f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Date>{now_iso}</Date>
+    <Author>{escape(user_id)}</Author>
+    <Description>Launches Victus Voice Assistant after the user signs in.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{escape(user_id)}</UserId>
+      <Delay>PT{int(delay_seconds)}S</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{escape(user_id)}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+    <WakeToRun>false</WakeToRun>
+    <ExecutionTimeLimit>PT30M</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{escape(str(exe))}</Command>
+      <Arguments>--autostart</Arguments>
+      <WorkingDirectory>{escape(str(install_dir.resolve()))}</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
+"""
+    fd, path = tempfile.mkstemp(suffix=".xml", prefix="VictusLogonTask_")
+    os.close(fd)
+    try:
+        # Task Scheduler XML must be UTF-16 (LE) with BOM.
+        with open(path, "w", encoding="utf-16") as f:
+            f.write(xml)
+        r = _run(
+            ["schtasks", "/Create", "/TN", TASK_NAME, "/XML", path, "/F"],
+            timeout=60,
+        )
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or "").strip()
+            return False, err or f"schtasks exit {r.returncode}"
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+def register_logon_task(*, delay_seconds: int = 45) -> tuple[bool, str]:
+    """Register the logon task. Tries PowerShell first, then schtasks.exe /XML.
+
+    Returns (True, "") on success — meaning the task is verified present in
+    Task Scheduler, not just that one of the registration commands returned 0.
+    """
+    if sys.platform != "win32":
+        return False, "Windows only"
+
+    install_dir = install_directory()
+    exe = install_dir / "VictusMorningBriefing.exe"
+    if not exe.exists():
+        return False, f"VictusMorningBriefing.exe not found in {install_dir}"
+
+    delay_seconds = max(0, min(int(delay_seconds), 600))
+    errors: list[str] = []
+
+    ok_a, err_a = _try_register_via_powershell(install_dir, delay_seconds)
+    if not ok_a:
+        errors.append(f"powershell: {err_a}")
+    if is_logon_task_registered():
+        autostart_log("windows logon task registered (powershell)")
+        return True, ""
+
+    ok_b, err_b = _try_register_via_schtasks_xml(install_dir, delay_seconds)
+    if not ok_b:
+        errors.append(f"schtasks-xml: {err_b}")
+    if is_logon_task_registered():
+        autostart_log("windows logon task registered (schtasks /XML)")
+        return True, ""
+
+    autostart_log(f"logon task registration failed: {' | '.join(errors)}")
+    return False, " | ".join(errors) or "registration failed"
 
 
 def unregister_logon_task() -> tuple[bool, str]:
     if sys.platform != "win32":
         return False, "Windows only"
     try:
-        subprocess.run(
+        # Try both paths; either is sufficient.
+        _run(
             [
                 "powershell",
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",
                 "-Command",
-                "Unregister-ScheduledTask -TaskName '%s' -Confirm:$false -ErrorAction SilentlyContinue"
-                % TASK_NAME,
+                f"Unregister-ScheduledTask -TaskName '{TASK_NAME}' -Confirm:$false -ErrorAction SilentlyContinue",
             ],
-            capture_output=True,
-            text=True,
             timeout=60,
-            creationflags=_CREATE_FLAGS,
         )
+        _run(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"], timeout=60)
         autostart_log("windows logon task removed")
         return True, ""
     except Exception as e:
