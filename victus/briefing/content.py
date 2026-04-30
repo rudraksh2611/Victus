@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import calendar
 import re
+import time
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 
 import feedparser
 
-from ..runtime_support import http_get_json
+from ..runtime_support import autostart_log, http_get_json
 
 WMO_LABELS = {
     0: "clear sky",
@@ -202,7 +203,21 @@ def _entry_timestamp_utc(entry: object) -> float | None:
 
 
 def fetch_headlines(feed_url: str, count: int) -> list[str]:
-    parsed = feedparser.parse(feed_url)
+    parsed = None
+    last_exc: BaseException | None = None
+    for attempt in range(1, 4):
+        try:
+            parsed = feedparser.parse(feed_url)
+            if getattr(parsed, "bozo", 0) and not getattr(parsed, "entries", None):
+                raise RuntimeError(getattr(parsed, "bozo_exception", "feed parse error"))
+            break
+        except Exception as e:
+            last_exc = e
+            autostart_log(f"feedparser attempt {attempt} for {feed_url} failed: {e!r}")
+            if attempt < 3:
+                time.sleep(0.6 * attempt)
+    if parsed is None:
+        raise last_exc if last_exc else RuntimeError("feed unavailable")
     now_utc = datetime.now(timezone.utc)
     min_recent_ts = (now_utc - timedelta(hours=30)).timestamp()
 
@@ -244,13 +259,40 @@ def resolve_language(cfg: dict) -> str:
     return lang if lang in {"en", "hi"} else "en"
 
 
-def build_intro_segments(now: datetime, lang: str, greeting_name: str) -> list[str]:
+def resolve_gender(cfg: dict) -> str:
+    g = str(cfg.get("greeting_gender", "none")).lower().strip()
+    return g if g in {"male", "female", "none"} else "none"
+
+
+def address_with_honorific(name: str, gender: str, lang: str) -> str:
+    """Append 'sir' / 'ma'am' (or Hindi equivalents) when the user picked a gender.
+
+    If the user already typed an honorific into greeting_name (e.g. "Rudra sir"),
+    we leave it alone so we don't say "Rudra sir sir".
+    """
+    n = (name or "").strip()
+    if not n:
+        return ""
+    lower = n.lower()
+    en_already = any(tok in lower for tok in (" sir", " ma'am", " maam", " madam"))
+    hi_already = ("जी" in n) or ("मैम" in n) or ("सर" in n) or ("मैडम" in n)
+    if en_already or hi_already:
+        return n
+    if gender == "male":
+        return f"{n} जी" if lang == "hi" else f"{n} sir"
+    if gender == "female":
+        return f"{n} जी" if lang == "hi" else f"{n} ma'am"
+    return n
+
+
+def build_intro_segments(now: datetime, lang: str, greeting_name: str, gender: str = "none") -> list[str]:
     # Day as digit (e.g. March 3), not ordinal words / padded-only forms
     day = f"{now.strftime('%A, %B')} {now.day}"
     time_spoken = spoken_time_for_lang(lang, now.hour, now.minute)
     greet = greeting_for_hour(now.hour, lang=lang)
+    addressed = address_with_honorific(greeting_name, gender, lang)
     return [
-        f"{greet}{greeting_name and ', ' + greeting_name or ''}.",
+        f"{greet}{addressed and ', ' + addressed or ''}.",
         (f"आज {day} है." if lang == "hi" else f"Today is {day}."),
         (f"अभी समय {time_spoken} है।" if lang == "hi" else f"It's {time_spoken}."),
     ]
@@ -276,16 +318,38 @@ def build_briefing_segments(cfg: dict) -> list[str]:
     now = datetime.now()
     lang = resolve_language(cfg)
     name = (cfg.get("greeting_name") or "").strip()
-    intro_lines = build_intro_segments(now, lang, name)
+    gender = resolve_gender(cfg)
+    intro_lines = build_intro_segments(now, lang, name, gender)
 
-    lat, lon, place = geocode(cfg["city"])
-    wdata = fetch_weather(lat, lon)
-    wx_segments = weather_segments(wdata, place, lang=lang)
+    wx_segments: list[str] = []
+    try:
+        lat, lon, place = geocode(cfg["city"])
+        wdata = fetch_weather(lat, lon)
+        wx_segments = weather_segments(wdata, place, lang=lang)
+    except Exception as e:
+        autostart_log(f"weather section failed (skipping): {e!r}")
+        wx_segments = [
+            "मौसम की जानकारी अभी उपलब्ध नहीं है।"
+            if lang == "hi"
+            else "Weather information is unavailable right now."
+        ]
 
-    count = int(cfg.get("news_count", 3))
+    news_segments: list[str] = []
+    try:
+        count = int(cfg.get("news_count", 3))
+    except (TypeError, ValueError):
+        count = 3
     feed = cfg.get("news_feed_url") or "https://feeds.bbci.co.uk/news/world/asia/india/rss.xml"
-    headlines = fetch_headlines(feed, count)
-    news_segments = build_news_segments(lang, headlines)
+    try:
+        headlines = fetch_headlines(feed, count)
+        news_segments = build_news_segments(lang, headlines)
+    except Exception as e:
+        autostart_log(f"news section failed (skipping): {e!r}")
+        news_segments = [
+            "अभी ताज़ा खबरें उपलब्ध नहीं हैं।"
+            if lang == "hi"
+            else "I could not fetch the headlines right now."
+        ]
 
     closing = "यही थीं आपकी अपडेट्स। आपका दिन शुभ हो।" if lang == "hi" else "That's everything for your briefing. Wishing you a wonderful day ahead."
     return [*intro_lines, *wx_segments, *news_segments, closing]
